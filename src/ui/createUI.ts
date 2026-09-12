@@ -63,6 +63,9 @@ export type EditorUI = {
     localProjectsPanel: HTMLElement
     localProjectsCloseButton: HTMLButtonElement
     localProjectsList: HTMLElement
+
+    newProjectButton: HTMLButtonElement
+    projectSaveState: HTMLSpanElement
 }
 
 
@@ -198,6 +201,17 @@ export function createUI(): EditorUI {
                             value="Mi mapa"
                             aria-label="Nombre del mapa"
                         />
+
+                        <span
+                            id="projectSaveState"
+                            class="project-save-state"
+                        >
+                            Nuevo
+                        </span>
+
+                        <button id="newProjectButton">
+                            ＋ Nuevo
+                        </button>
 
                         <button id="saveLocalProjectButton">
                             💾 Guardar
@@ -733,6 +747,16 @@ export function createUI(): EditorUI {
         localProjectsList:
             getElement<HTMLElement>(
                 '#localProjectsList'
+            ),
+
+        newProjectButton:
+            getElement<HTMLButtonElement>(
+                '#newProjectButton'
+            ),
+
+        projectSaveState:
+            getElement<HTMLSpanElement>(
+                '#projectSaveState'
             ),
     }
 }

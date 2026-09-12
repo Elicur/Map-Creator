@@ -668,3 +668,22 @@ select {
         margin-left: 0;
     }
 }
+
+
+
+.project-save-state {
+    min-width: 80px;
+
+    color: #aaaaaa;
+
+    font-size: 12px;
+
+    white-space: nowrap;
+}
+
+
+.project-save-state.dirty {
+    color: #f0b429;
+
+    font-weight: 600;
+}

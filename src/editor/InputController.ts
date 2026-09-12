@@ -54,6 +54,10 @@ import type {
     LocalProjectRecord,
 } from '../project/LocalProjectStore'
 
+
+const LAST_LOCAL_PROJECT_KEY =
+    'map-creator-last-project-id'
+
 export class InputController {
 
     private ui: EditorUI
@@ -89,11 +93,19 @@ export class InputController {
 
     private rebuildingHistory = false
 
-    private localProjectStore:
-        LocalProjectStore
+    private localProjectStore: LocalProjectStore
 
-    private currentLocalProjectId:
-        string | null = null
+    private currentLocalProjectId: string | null = null
+
+    private projectDirty = false
+
+    private savedHistoryStateId = 0
+
+    private savedGeographyLocked = false
+
+    private savedProjectName = 'Mi mapa'
+
+    private requiresLocalSave = false
 
     constructor(
         ui: EditorUI,
@@ -342,6 +354,29 @@ export class InputController {
             'click',
             this.handleLocalProjectsCloseClick
         )
+
+        // ------------------------------
+        // PROYECTO
+        // ------------------------------
+
+        this.ui.projectNameInput.addEventListener(
+            'input',
+            this.handleProjectNameInput
+        )
+
+        this.ui.newProjectButton.addEventListener(
+            'click',
+            this.handleNewProjectClick
+        )
+
+        // -----------------------------
+        // ANTES DE CERRAR VENTANA
+        // -----------------------------
+        window.addEventListener(
+            'beforeunload',
+            this.handleBeforeUnload
+        )
+
         /*
          * Dejamos explícitamente sincronizada
          * la herramienta inicial con la UI.
@@ -351,6 +386,10 @@ export class InputController {
         )
 
         this.updateGeographyLockUI()
+
+        this.markCurrentStateAsSaved()
+
+        void this.restoreLastLocalProject()
     }
 
 
@@ -559,6 +598,27 @@ export class InputController {
         this.ui.localProjectsCloseButton.removeEventListener(
             'click',
             this.handleLocalProjectsCloseClick
+        )
+
+        // ------------------------------
+        // PROYECTO
+        // ------------------------------
+        this.ui.projectNameInput.removeEventListener(
+            'input',
+            this.handleProjectNameInput
+        )
+
+        this.ui.newProjectButton.removeEventListener(
+            'click',
+            this.handleNewProjectClick
+        )
+
+        // -----------------------------
+        // ANTES DE CERRAR VENTANA
+        // -----------------------------
+        window.removeEventListener(
+            'beforeunload',
+            this.handleBeforeUnload
         )
     }
 
@@ -806,7 +866,7 @@ export class InputController {
                 return
             }
 
-            this.historyManager.push({
+            this.commitHistory({
                 type: 'clear',
             })
 
@@ -1127,7 +1187,7 @@ export class InputController {
                 completedStroke !== null
             ) {
 
-                this.historyManager.push(
+                this.commitHistory(
                     completedStroke
                 )
             }
@@ -1177,7 +1237,7 @@ export class InputController {
             result.status === 'created'
         ) {
 
-            this.historyManager.push({
+            this.commitHistory({
                 type: 'create-territory',
 
                 territoryId:
@@ -1375,7 +1435,7 @@ export class InputController {
             return
         }
 
-        this.historyManager.push({
+        this.commitHistory({
             type: 'rename-territory',
             territoryId: territory.id,
             name: newName,
@@ -1438,7 +1498,7 @@ export class InputController {
             }
 
 
-            this.historyManager.push({
+            this.commitHistory({
                 type: 'create-country',
                 countryId: country.id,
                 name: country.name,
@@ -1693,7 +1753,7 @@ export class InputController {
             )
 
 
-            this.historyManager.push({
+            this.commitHistory({
                 type: 'assign-territory-country',
                 territoryId:
                     this.selectedTerritoryId,
@@ -2066,6 +2126,8 @@ export class InputController {
 
             await this.redrawHistory()
 
+            this.updateProjectDirtyState()
+
             this.showHistoryMessage(
                 command,
                 'undo'
@@ -2128,6 +2190,8 @@ export class InputController {
         try {
 
             await this.redrawHistory()
+
+            this.updateProjectDirtyState()
 
             this.showHistoryMessage(
                 command,
@@ -2581,7 +2645,7 @@ export class InputController {
         )
 
 
-        this.historyManager.push({
+        this.commitHistory({
             type: 'assign-territory-country',
             territoryId: territory.id,
             countryId: country.id,
@@ -3164,6 +3228,8 @@ export class InputController {
 
         this.updateGeographyLockUI()
 
+        this.updateProjectDirtyState()
+
         this.ui.statusMessage.textContent =
             'Geografía finalizada'
     }
@@ -3181,6 +3247,7 @@ export class InputController {
 
         this.updateGeographyLockUI()
 
+        this.updateProjectDirtyState()
 
         this.ui.statusMessage.textContent =
             'Geografía editable'
@@ -3313,7 +3380,7 @@ export class InputController {
             )
 
 
-            this.historyManager.push({
+            this.commitHistory({
                 type: 'update-country',
                 countryId: updated.id,
                 name: updated.name,
@@ -3427,7 +3494,7 @@ export class InputController {
             )
 
 
-            this.historyManager.push({
+            this.commitHistory({
                 type: 'delete-country',
                 countryId: country.id,
             })
@@ -3561,8 +3628,8 @@ export class InputController {
             }
 
             const shouldImport =
-                window.confirm(
-                    'Importar este mapa reemplazará el proyecto actual. ¿Continuar?'
+                this.confirmDiscardUnsavedChanges(
+                    `Importar "${file.name}"`
                 )
 
             if (!shouldImport) {
@@ -3578,22 +3645,33 @@ export class InputController {
                 const json =
                     await file.text()
 
-
                 const result =
                     await this.projectManager.importFromJson(
                         json
                     )
 
+                // --------------------------------
+                // EL MAPA IMPORTADO NO PERTENECE
+                // TODAVÍA A INDEXEDDB
+                // --------------------------------
+
                 this.currentLocalProjectId =
                     null
+
+                this.forgetLastLocalProject()
 
                 this.ui.projectNameInput.value =
                     result.name
 
-                    /** El proyecto importado se convierte
-                 * en el nuevo punto de partida del
-                 * Undo / Redo.
-                 */
+                // --------------------------------
+                // BASELINE DEL UNDO / REDO
+                // --------------------------------
+
+                /*
+                * El proyecto importado se convierte
+                * en el nuevo punto de partida del
+                * Undo / Redo.
+                */
                 this.historyBaseProjectJson =
                     this.projectManager.exportToJson(
                         result.geographyLocked,
@@ -3606,19 +3684,19 @@ export class InputController {
                 */
                 this.historyManager.reset()
 
-
                 this.geographyLocked =
                     result.geographyLocked
 
+                // --------------------------------
+                // ESTADO VISUAL
+                // --------------------------------
 
                 this.clearTerritoryPreview()
 
                 this.clearTerritorySelection()
 
-
                 this.selectedCountryId =
                     null
-
 
                 /*
                 * Siempre arrancamos en una
@@ -3629,13 +3707,44 @@ export class InputController {
                     'select'
                 )
 
-
                 this.updateGeographyLockUI()
 
                 this.refreshCountryUI()
 
                 this.showSelectedCountry()
 
+                // --------------------------------
+                // ESTADO DE GUARDADO
+                // --------------------------------
+
+                /*
+                * El proyecto importado es nuestro
+                * nuevo estado base.
+                *
+                * Guardamos estos valores para poder
+                * distinguir posteriormente los
+                * cambios hechos sobre el importado.
+                */
+                this.savedHistoryStateId =
+                    this.historyManager.stateId
+
+                this.savedGeographyLocked =
+                    this.geographyLocked
+
+                this.savedProjectName =
+                    this.getProjectName()
+
+                /*
+                * Pero el mapa todavía NO está
+                * almacenado en IndexedDB.
+                *
+                * Por eso debe aparecer como
+                * "Sin guardar".
+                */
+                this.requiresLocalSave =
+                    true
+
+                this.updateProjectDirtyState()
 
                 this.ui.statusMessage.textContent =
                     `Mapa "${file.name}" importado correctamente`
@@ -3662,6 +3771,7 @@ export class InputController {
                     ''
             }
         }
+
 
     private getProjectName(): string {
 
@@ -3705,14 +3815,20 @@ export class InputController {
                         json
                     )
 
-
                 this.currentLocalProjectId =
                     record.id
 
+                this.rememberLastLocalProject(
+                    record.id
+                )
 
                 this.ui.projectNameInput.value =
                     record.name
 
+                this.requiresLocalSave =
+                    false
+
+                this.markCurrentStateAsSaved()
 
                 this.ui.statusMessage.textContent =
                     `Mapa "${record.name}" guardado`
@@ -3978,19 +4094,21 @@ export class InputController {
     // CARGAR PROYECTO LOCAL
     // --------------------------------------------------
     private async loadLocalProject(
-        project: LocalProjectRecord
+        project: LocalProjectRecord,
+        askBeforeReplace = true
     ) {
 
-        const shouldLoad =
-            window.confirm(
-                `Abrir "${project.name}" reemplazará el mapa actual. ¿Continuar?`
-            )
+        if (askBeforeReplace) {
 
+            const shouldLoad =
+                this.confirmDiscardUnsavedChanges(
+                    `Abrir "${project.name}"`
+                )
 
-        if (!shouldLoad) {
-            return
+            if (!shouldLoad) {
+                return
+            }
         }
-
 
         try {
 
@@ -4021,6 +4139,13 @@ export class InputController {
             this.currentLocalProjectId =
                 project.id
 
+            this.requiresLocalSave =
+                false
+
+            this.rememberLastLocalProject(
+                project.id
+            )
+
 
             this.ui.projectNameInput.value =
                 result.name
@@ -4045,6 +4170,9 @@ export class InputController {
             this.refreshCountryUI()
 
             this.showSelectedCountry()
+
+
+            this.markCurrentStateAsSaved()
 
 
             this.ui.localProjectsPanel.classList.add(
@@ -4082,18 +4210,15 @@ export class InputController {
                 `¿Eliminar "${project.name}" de los mapas guardados?`
             )
 
-
         if (!shouldDelete) {
             return
         }
-
 
         try {
 
             await this.localProjectStore.delete(
                 project.id
             )
-
 
             /*
             * Si eliminamos del almacenamiento
@@ -4110,6 +4235,13 @@ export class InputController {
 
                 this.currentLocalProjectId =
                     null
+
+                this.requiresLocalSave =
+                    true
+
+                this.forgetLastLocalProject()
+
+                this.updateProjectDirtyState()
             }
 
 
@@ -4129,6 +4261,356 @@ export class InputController {
 
             this.ui.statusMessage.textContent =
                 'No se pudo eliminar el mapa'
+        }
+    }
+
+
+    // --------------------------------------------------
+    // ESTADO DEL PROYECTO
+    // --------------------------------------------------
+
+    private updateProjectDirtyState() {
+
+        this.projectDirty =
+            this.requiresLocalSave
+            ||
+            (
+                this.historyManager.stateId !==
+                this.savedHistoryStateId
+            )
+            ||
+            (
+                this.geographyLocked !==
+                this.savedGeographyLocked
+            )
+            ||
+            (
+                this.getProjectName() !==
+                this.savedProjectName
+            )
+
+
+        this.updateProjectSaveStateUI()
+    }
+
+
+    // --------------------------------------------------
+    // MARCAR ESTADO ACTUAL COMO GUARDADO
+    // --------------------------------------------------
+
+    private markCurrentStateAsSaved() {
+
+        this.savedHistoryStateId =
+            this.historyManager.stateId
+
+        this.savedGeographyLocked =
+            this.geographyLocked
+
+        this.savedProjectName =
+            this.getProjectName()
+
+        this.projectDirty =
+            false
+
+        this.updateProjectSaveStateUI()
+    }
+
+
+    // --------------------------------------------------
+    // INDICADOR
+    // --------------------------------------------------
+
+    private updateProjectSaveStateUI() {
+
+        this.ui.projectSaveState.classList.toggle(
+            'dirty',
+            this.projectDirty
+        )
+
+        if (this.projectDirty) {
+
+            this.ui.projectSaveState.textContent =
+                '● Sin guardar'
+
+            return
+        }
+
+        if (
+            this.currentLocalProjectId !== null
+        ) {
+
+            this.ui.projectSaveState.textContent =
+                'Guardado'
+
+            return
+        }
+
+        this.ui.projectSaveState.textContent =
+            'Sin cambios'
+    }
+
+
+    // --------------------------------------------------
+    // COMMIT HISTORY
+    // --------------------------------------------------
+
+    private commitHistory(
+        command: HistoryCommand
+    ) {
+
+        this.historyManager.push(
+            command
+        )
+
+
+        this.updateProjectDirtyState()
+    }
+
+
+    private handleProjectNameInput =
+    () => {
+
+        this.updateProjectDirtyState()
+    }
+
+
+    // --------------------------------------------------
+    // CONFIRMAR PÉRDIDA DE CAMBIOS
+    // --------------------------------------------------
+
+    private confirmDiscardUnsavedChanges(
+        action: string
+    ): boolean {
+
+        if (!this.projectDirty) {
+            return true
+        }
+
+        return window.confirm(
+            `Hay cambios sin guardar.\n\n${action} descartará esos cambios.\n\n¿Continuar?`
+        )
+    }
+
+
+    // --------------------------------------------------
+    // NUEVO MAPA
+    // --------------------------------------------------
+
+    private handleNewProjectClick =
+        () => {
+
+            const shouldCreate =
+                this.confirmDiscardUnsavedChanges(
+                    'Crear un mapa nuevo'
+                )
+
+
+            if (!shouldCreate) {
+                return
+            }
+
+
+            this.createNewProject()
+        }
+    
+
+    // --------------------------------------------------
+    // CREAR NUEVO PROYECTO
+    // --------------------------------------------------
+    
+    private createNewProject() {
+
+        // -----------------------------
+        // ESTADO VISUAL
+        // -----------------------------
+
+        this.clearTerritoryPreview()
+        this.clearTerritorySelection()
+
+        this.ui.countryPanel.classList.add(
+            'hidden'
+        )
+
+        this.ui.localProjectsPanel.classList.add(
+            'hidden'
+        )
+
+
+        // -----------------------------
+        // MAPA
+        // -----------------------------
+
+        this.drawing.clear()
+        this.territoryManager.reset()
+        this.countryManager.reset()
+        this.territoryControlManager.reset()
+
+
+        // -----------------------------
+        // ESTADO DEL EDITOR
+        // -----------------------------
+
+        this.selectedCountryId =
+            null
+
+        this.geographyLocked =
+            false
+
+        this.currentLocalProjectId =
+            null
+
+        this.requiresLocalSave =
+            false
+
+        this.forgetLastLocalProject()
+
+        this.historyBaseProjectJson =
+            null
+
+        this.historyManager.reset()
+
+
+        // -----------------------------
+        // PROYECTO
+        // -----------------------------
+
+        this.ui.projectNameInput.value =
+            'Mi mapa'
+
+        this.setTool(
+            'pencil'
+        )
+
+        this.updateGeographyLockUI()
+        this.refreshCountryUI()
+        this.showSelectedCountry()
+
+        this.camera.resetView()
+
+        /*
+        * El mapa nuevo vacío es nuestro
+        * nuevo estado inicial.
+        */
+        this.markCurrentStateAsSaved()
+
+        this.ui.statusMessage.textContent =
+            'Nuevo mapa creado'
+    }
+
+
+    // --------------------------------------------------
+    // COMPROBAR SI HAY CAMBIOS SIN GUARDAR
+    // --------------------------------------------------
+    private handleBeforeUnload =
+        (event: BeforeUnloadEvent) => {
+
+            if (!this.projectDirty) {
+                return
+            }
+
+            event.preventDefault()
+
+            /*
+            * Los navegadores modernos muestran
+            * su propio texto de confirmación.
+            */
+            event.returnValue =
+                ''
+        }
+
+
+    // --------------------------------------------------
+    // ÚLTIMO PROYECTO LOCAL
+    // --------------------------------------------------
+
+    private rememberLastLocalProject(
+        projectId: string
+    ) {
+
+        localStorage.setItem(
+            LAST_LOCAL_PROJECT_KEY,
+            projectId
+        )
+    }
+
+
+    private forgetLastLocalProject() {
+
+        localStorage.removeItem(
+            LAST_LOCAL_PROJECT_KEY
+        )
+    }
+
+
+    private getLastLocalProjectId():
+        string | null {
+
+        return localStorage.getItem(
+            LAST_LOCAL_PROJECT_KEY
+        )
+    }
+
+
+    // --------------------------------------------------
+    // RESTAURAR ÚLTIMO PROYECTO
+    // --------------------------------------------------
+
+    private async restoreLastLocalProject() {
+
+        const projectId =
+            this.getLastLocalProjectId()
+
+
+        if (projectId === null) {
+            return
+        }
+
+
+        try {
+
+            const project =
+                await this.localProjectStore.getById(
+                    projectId
+                )
+
+
+            /*
+            * Puede ocurrir que localStorage todavía
+            * tenga el ID pero el proyecto haya sido
+            * eliminado de IndexedDB.
+            */
+            if (project === null) {
+
+                this.forgetLastLocalProject()
+
+                return
+            }
+
+
+            await this.loadLocalProject(
+                project,
+                false
+            )
+
+
+            this.ui.statusMessage.textContent =
+                `Mapa "${project.name}" restaurado`
+        }
+
+        catch (error) {
+
+            console.error(
+                'No se pudo restaurar el último mapa',
+                error
+            )
+
+
+            /*
+            * No queremos impedir que arranque el editor
+            * simplemente porque la restauración falló.
+            */
+            this.ui.statusMessage.textContent =
+                'No se pudo restaurar el último mapa'
         }
     }
 }
