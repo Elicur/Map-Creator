@@ -1271,22 +1271,14 @@ export class InputController {
             const completedStroke =
                 this.drawing.endStroke()
 
+
             if (
                 completedStroke !== null
             ) {
 
-                /*
-                * Si estamos dividiendo un territorio,
-                * este trazo NO debe guardarse como
-                * un stroke normal.
-                *
-                * finishTerritorySplit() se encargará
-                * de validar la división y guardar un
-                * SplitTerritoryCommand.
-                */
                 if (
                     this.currentTool ===
-                    'divide-territory'
+                        'divide-territory'
                 ) {
 
                     void this.finishTerritorySplit(
@@ -1297,18 +1289,16 @@ export class InputController {
                 else {
 
                     /*
-                    * Lápiz / goma normales.
+                    * Un lápiz/borrador normal ahora
+                    * debe sincronizar también los
+                    * territorios.
                     */
-                    this.commitHistory(
+                    void this.finishBorderStroke(
                         completedStroke
                     )
                 }
             }
 
-            /*
-            * Este bloque se mantiene igual
-            * independientemente de la herramienta.
-            */
             this.camera.stopPan()
 
             this.ui.workspace.classList.remove(
@@ -1326,6 +1316,186 @@ export class InputController {
                 )
             }
         }
+
+    
+    // --------------------------------------------------
+    // TERMINAR EDICIÓN NORMAL DE FRONTERAS
+    // --------------------------------------------------
+
+    private async finishBorderStroke(
+        stroke: StrokeCommand
+    ) {
+
+        const result =
+            this.reconcileTerritoriesAfterBorderChange()
+
+        // --------------------------------
+        // EDICIÓN INVÁLIDA
+        // --------------------------------
+
+        if (
+            result.status ===
+            'open-region'
+        ) {
+
+            /*
+            * El stroke todavía no fue agregado
+            * al historial.
+            *
+            * Reconstruimos el estado anterior y
+            * la línea inválida desaparece.
+            */
+            this.rebuildingHistory =
+                true
+
+            try {
+
+                await this.redrawHistory()
+            }
+
+            finally {
+
+                this.rebuildingHistory =
+                    false
+            }
+
+            this.ui.statusMessage.textContent =
+                'La edición dejaría un territorio abierto. Se descartó el cambio.'
+
+            return
+        }
+
+        /*
+        * Recién ahora sabemos que la modificación
+        * geográfica es válida.
+        */
+        this.commitHistory(
+            stroke
+        )
+
+        this.refreshCountryUI()
+
+        this.refreshTerritorySelection()
+
+        if (
+            result.createdTerritories.length > 0
+        ) {
+
+            const createdIds =
+                result.createdTerritories
+                    .map(
+                        item =>
+                            `#${item.territoryId}`
+                    )
+                    .join(
+                        ', '
+                    )
+
+            this.ui.statusMessage.textContent =
+                `Frontera actualizada. Nuevos territorios: ${createdIds}`
+
+            return
+        }
+
+        if (
+            result.deletedTerritoryIds.length > 0
+        ) {
+
+            this.ui.statusMessage.textContent =
+                'Frontera actualizada. Se fusionaron territorios.'
+
+            return
+        }
+
+        this.ui.statusMessage.textContent =
+            'Frontera actualizada'
+    }
+
+
+    // --------------------------------------------------
+    // SINCRONIZAR TERRITORIOS DESPUÉS DE FRONTERAS
+    // --------------------------------------------------
+
+    private reconcileTerritoriesAfterBorderChange() {
+
+        const result =
+            this.territoryManager
+                .reconcileWithBorders(
+                    this.drawing.getPixels()
+                )
+
+        if (
+            result.status !==
+            'reconciled'
+        ) {
+            return result
+        }
+
+        /*
+        * Primero capturamos qué país debe
+        * heredar cada territorio nuevo.
+        *
+        * Lo hacemos antes de eliminar
+        * asignaciones antiguas.
+        */
+        const inheritedCountries =
+            result.createdTerritories.map(
+                created => ({
+                    territoryId:
+                        created.territoryId,
+
+                    countryId:
+                        this.territoryControlManager
+                            .getCountryId(
+                                created.sourceTerritoryId
+                            ),
+                })
+            )
+
+        // --------------------------------
+        // TERRITORIOS ELIMINADOS
+        // --------------------------------
+
+        for (
+            const territoryId of
+            result.deletedTerritoryIds
+        ) {
+
+            this.territoryControlManager.assign(
+                territoryId,
+                null
+            )
+        }
+
+        // --------------------------------
+        // TERRITORIOS NUEVOS
+        // --------------------------------
+
+        for (
+            const inherited of
+            inheritedCountries
+        ) {
+
+            if (
+                inherited.countryId ===
+                null
+            ) {
+                continue
+            }
+
+            this.territoryControlManager.assign(
+                inherited.territoryId,
+                inherited.countryId
+            )
+
+            this.applyTerritoryCountryColor(
+                inherited.territoryId,
+                inherited.countryId
+            )
+        }
+
+        return result
+    }
 
 
     // --------------------------------------------------
@@ -2841,6 +3011,26 @@ export class InputController {
                 this.drawing.renderStroke(
                     command
                 )
+
+                const result =
+                    this.reconcileTerritoriesAfterBorderChange()
+
+                /*
+                * Un stroke que llegó al historial ya
+                * fue validado cuando se creó.
+                *
+                * Si esto ocurre indicaría una
+                * inconsistencia interna.
+                */
+                if (
+                    result.status !==
+                    'reconciled'
+                ) {
+
+                    throw new Error(
+                        'El historial contiene una edición geográfica inválida'
+                    )
+                }
             }
 
             // -----------------------------

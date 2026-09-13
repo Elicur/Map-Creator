@@ -50,6 +50,43 @@ export type SplitTerritoryResult =
     }
 
 
+export type ReconciledTerritoryCreation = {
+    territoryId: number
+    sourceTerritoryId: number
+}
+
+
+export type ReconcileTerritoriesResult =
+    | {
+        status: 'reconciled'
+
+        createdTerritories:
+            ReconciledTerritoryCreation[]
+
+        deletedTerritoryIds:
+            number[]
+    }
+    | {
+        status: 'open-region'
+
+        territoryIds:
+            number[]
+    }
+
+
+type MapComponent = {
+    pixels: Int32Array
+
+    overlaps:
+        Map<number, number>
+
+    touchesEdge:
+        boolean
+
+    firstPixel:
+        number
+}
+
 export class TerritoryManager {
 
 	private context: CanvasRenderingContext2D
@@ -428,35 +465,10 @@ export class TerritoryManager {
 		color: RGBColor
 	) {
 
-		for (
-			let i = 0;
-			i < pixels.length;
-			i++
-		) {
-
-			const imageIndex =
-				pixels[i] * 4
-
-
-			this.territoryImageData.data[
-				imageIndex
-			] = color.r
-
-
-			this.territoryImageData.data[
-				imageIndex + 1
-			] = color.g
-
-
-			this.territoryImageData.data[
-				imageIndex + 2
-			] = color.b
-
-
-			this.territoryImageData.data[
-				imageIndex + 3
-			] = 255
-		}
+		this.paintPixelsToImageData(
+			pixels,
+			color
+		)
 
 
 		this.context.putImageData(
@@ -466,6 +478,42 @@ export class TerritoryManager {
 		)
 	}
 
+
+	private paintPixelsToImageData(
+		pixels: Int32Array,
+		color: RGBColor
+	) {
+
+		for (
+			let i = 0;
+			i < pixels.length;
+			i++
+		) {
+
+			const imageIndex =
+				pixels[i] * 4
+
+			this.territoryImageData.data[
+				imageIndex
+			] =
+				color.r
+
+			this.territoryImageData.data[
+				imageIndex + 1
+			] =
+				color.g
+
+			this.territoryImageData.data[
+				imageIndex + 2
+			] =
+				color.b
+
+			this.territoryImageData.data[
+				imageIndex + 3
+			] =
+				255
+		}
+	}
 
 	// --------------------------------------------------
 	// LÍMITES
@@ -1492,6 +1540,843 @@ export class TerritoryManager {
 		}
 
 		return components
+	}
+
+
+	// --------------------------------------------------
+	// RECONCILIAR TERRITORIOS CON LAS FRONTERAS
+	// --------------------------------------------------
+
+	public reconcileWithBorders(
+		borderPixels: Uint8ClampedArray
+	): ReconcileTerritoriesResult {
+
+		/*
+		* Si todavía no existen territorios,
+		* un trazo normal no tiene nada que
+		* recalcular.
+		*/
+		if (
+			this.territories.size === 0
+		) {
+
+			return {
+				status:
+					'reconciled',
+
+				createdTerritories:
+					[],
+
+				deletedTerritoryIds:
+					[],
+			}
+		}
+
+		const components =
+			this.findMapComponents(
+				borderPixels
+			)
+
+		// --------------------------------
+		// COMPROBAR REGIONES ABIERTAS
+		// --------------------------------
+
+		const openTerritoryIds =
+			new Set<number>()
+
+		for (
+			const component of
+			components
+		) {
+
+			if (
+				!component.touchesEdge
+			) {
+				continue
+			}
+
+			for (
+				const territoryId of
+				component.overlaps.keys()
+			) {
+
+				openTerritoryIds.add(
+					territoryId
+				)
+			}
+		}
+
+		/*
+		* No modificamos nada si algún
+		* territorio quedó conectado con
+		* el exterior del mapa.
+		*/
+		if (
+			openTerritoryIds.size > 0
+		) {
+
+			return {
+				status:
+					'open-region',
+
+				territoryIds:
+					Array.from(
+						openTerritoryIds
+					),
+			}
+		}
+
+		// --------------------------------
+		// COPIAR ESTADO ANTERIOR
+		// --------------------------------
+
+		const oldTerritories =
+			new Map<number, Territory>()
+
+		const oldColors =
+			new Map<number, RGBColor>()
+
+		for (
+			const [
+				territoryId,
+				territory,
+			] of this.territories
+		) {
+
+			oldTerritories.set(
+				territoryId,
+				{
+					...territory,
+				}
+			)
+
+			oldColors.set(
+				territoryId,
+				this.getTerritoryColor(
+					territoryId
+				)
+			)
+		}
+
+		// --------------------------------
+		// CANDIDATOS PARA CONSERVAR IDS
+		// --------------------------------
+
+		const candidates: {
+			componentIndex: number
+			territoryId: number
+			overlap: number
+			firstPixel: number
+		}[] = []
+
+		for (
+			let componentIndex = 0;
+			componentIndex < components.length;
+			componentIndex++
+		) {
+
+			const component =
+				components[
+					componentIndex
+				]
+
+
+			for (
+				const [
+					territoryId,
+					overlap,
+				] of component.overlaps
+			) {
+
+				candidates.push({
+					componentIndex,
+					territoryId,
+					overlap,
+					firstPixel:
+						component.firstPixel,
+				})
+			}
+		}
+
+		/*
+		* Mayor solapamiento primero.
+		*
+		* Esto hace que, al dividir,
+		* la parte más grande conserve
+		* automáticamente el ID anterior.
+		*/
+		candidates.sort(
+			(
+				a,
+				b
+			) => {
+
+				const overlapDifference =
+					b.overlap -
+					a.overlap
+
+
+				if (
+					overlapDifference !== 0
+				) {
+					return overlapDifference
+				}
+
+				const idDifference =
+					a.territoryId -
+					b.territoryId
+
+				if (
+					idDifference !== 0
+				) {
+					return idDifference
+				}
+
+				return (
+					a.firstPixel -
+					b.firstPixel
+				)
+			}
+		)
+
+		const assignedIds:
+			Array<number | null> =
+			new Array(
+				components.length
+			).fill(
+				null
+			)
+
+		const claimedOldIds =
+			new Set<number>()
+
+		/*
+		* Un territorio anterior solamente
+		* puede conservar su ID en una de
+		* las nuevas regiones.
+		*/
+		for (
+			const candidate of
+			candidates
+		) {
+
+			if (
+				assignedIds[
+					candidate.componentIndex
+				] !== null
+			) {
+				continue
+			}
+
+
+			if (
+				claimedOldIds.has(
+					candidate.territoryId
+				)
+			) {
+				continue
+			}
+
+			assignedIds[
+				candidate.componentIndex
+			] =
+				candidate.territoryId
+
+			claimedOldIds.add(
+				candidate.territoryId
+			)
+		}
+
+
+		// --------------------------------
+		// CREAR IDS PARA PARTES NUEVAS
+		// --------------------------------
+
+		const createdTerritories:
+			ReconciledTerritoryCreation[] =
+			[]
+
+		const sourceTerritoryIds:
+			number[] =
+			new Array(
+				components.length
+			)
+
+		for (
+			let componentIndex = 0;
+			componentIndex < components.length;
+			componentIndex++
+		) {
+
+			const component =
+				components[
+					componentIndex
+				]
+
+			const sourceTerritoryId =
+				this.findMainOverlapTerritory(
+					component.overlaps
+				)
+
+			sourceTerritoryIds[
+				componentIndex
+			] =
+				sourceTerritoryId
+
+			if (
+				assignedIds[
+					componentIndex
+				] !== null
+			) {
+				continue
+			}
+
+			const newTerritoryId =
+				this.nextTerritoryId++
+
+			assignedIds[
+				componentIndex
+			] =
+				newTerritoryId
+
+			createdTerritories.push({
+				territoryId:
+					newTerritoryId,
+
+				sourceTerritoryId,
+			})
+		}
+
+		// --------------------------------
+		// IDS QUE DESAPARECIERON
+		// --------------------------------
+
+		const survivingOldIds =
+			new Set<number>()
+
+		for (
+			const territoryId of
+			assignedIds
+		) {
+
+			if (
+				territoryId !== null &&
+				oldTerritories.has(
+					territoryId
+				)
+			) {
+
+				survivingOldIds.add(
+					territoryId
+				)
+			}
+		}
+
+		const deletedTerritoryIds:
+			number[] = []
+
+		for (
+			const territoryId of
+			oldTerritories.keys()
+		) {
+
+			if (
+				!survivingOldIds.has(
+					territoryId
+				)
+			) {
+
+				deletedTerritoryIds.push(
+					territoryId
+				)
+			}
+		}
+
+		// --------------------------------
+		// RECONSTRUIR RASTER
+		// --------------------------------
+
+		this.territoryIds.fill(
+			0
+		)
+
+		this.territories.clear()
+
+		this.territoryPixels.clear()
+
+		/*
+		* Fondo blanco.
+		*/
+		this.territoryImageData.data.fill(
+			255
+		)
+
+		for (
+			let componentIndex = 0;
+			componentIndex < components.length;
+			componentIndex++
+		) {
+
+			const territoryId =
+				assignedIds[
+					componentIndex
+				]
+
+			if (
+				territoryId === null
+			) {
+				continue
+			}
+
+			const component =
+				components[
+					componentIndex
+				]
+
+			const oldTerritory =
+				oldTerritories.get(
+					territoryId
+				)
+
+			/*
+			* Si conserva un ID existente,
+			* conserva también el nombre.
+			*/
+			const territory:
+				Territory =
+				oldTerritory
+					?? {
+						id:
+							territoryId,
+
+						name:
+							`Territorio ${territoryId}`,
+					}
+
+			this.territories.set(
+				territoryId,
+				{
+					...territory,
+				}
+			)
+
+			this.territoryPixels.set(
+				territoryId,
+				component.pixels
+			)
+
+			for (
+				let i = 0;
+				i < component.pixels.length;
+				i++
+			) {
+
+				this.territoryIds[
+					component.pixels[i]
+				] =
+					territoryId
+			}
+
+			/*
+			* Conservamos el color del
+			* territorio anterior que dio
+			* origen a esta región.
+			*/
+			const sourceTerritoryId =
+				sourceTerritoryIds[
+					componentIndex
+				]
+
+			const color =
+				oldColors.get(
+					oldTerritory !==
+						undefined
+						? territoryId
+						: sourceTerritoryId
+				)
+				??
+				NEUTRAL_TERRITORY_COLOR
+
+
+			this.paintPixelsToImageData(
+				component.pixels,
+				color
+			)
+		}
+
+		/*
+		* Actualizamos Canvas una sola vez.
+		*/
+		this.context.putImageData(
+			this.territoryImageData,
+			0,
+			0
+		)
+
+		return {
+			status:
+				'reconciled',
+
+			createdTerritories,
+
+			deletedTerritoryIds,
+		}
+	}
+
+
+	// --------------------------------------------------
+	// COMPONENTES DEFINIDOS POR LAS FRONTERAS
+	// --------------------------------------------------
+
+	private findMapComponents(
+		borderPixels: Uint8ClampedArray
+	): MapComponent[] {
+
+		const totalPixels =
+			MAP_WIDTH *
+			MAP_HEIGHT
+
+		if (
+			borderPixels.length !==
+			totalPixels * 4
+		) {
+
+			throw new Error(
+				'El buffer de fronteras tiene un tamaño inválido'
+			)
+		}
+
+		const visited =
+			new Uint8Array(
+				totalPixels
+			)
+
+		/*
+		* Reutilizamos una única cola para
+		* no crear arrays enormes para cada
+		* región que encontremos.
+		*/
+		const queue =
+			new Int32Array(
+				totalPixels
+			)
+
+		const components:
+			MapComponent[] = []
+
+		const isBorder =
+			(
+				pixelIndex: number
+			) => {
+
+				return (
+					borderPixels[
+						pixelIndex * 4 + 3
+					] > 10
+				)
+			}
+
+		for (
+			let startPixel = 0;
+			startPixel < totalPixels;
+			startPixel++
+		) {
+
+			if (
+				visited[
+					startPixel
+				] !== 0
+			) {
+				continue
+			}
+
+			if (
+				isBorder(
+					startPixel
+				)
+			) {
+				continue
+			}
+
+			let queueStart =
+				0
+
+			let queueEnd =
+				0
+
+			let touchesEdge =
+				false
+
+			const overlaps =
+				new Map<number, number>()
+
+			visited[
+				startPixel
+			] = 1
+
+			queue[
+				queueEnd++
+			] =
+				startPixel
+
+			const tryVisit =
+				(
+					pixelIndex: number
+				) => {
+
+					if (
+						visited[
+							pixelIndex
+						] !== 0
+					) {
+						return
+					}
+
+					if (
+						isBorder(
+							pixelIndex
+						)
+					) {
+						return
+					}
+
+					visited[
+						pixelIndex
+					] = 1
+
+					queue[
+						queueEnd++
+					] =
+						pixelIndex
+				}
+
+			while (
+				queueStart <
+				queueEnd
+			) {
+
+				const pixelIndex =
+					queue[
+						queueStart++
+					]
+
+				const x =
+					pixelIndex %
+					MAP_WIDTH
+
+				const y =
+					Math.floor(
+						pixelIndex /
+						MAP_WIDTH
+					)
+
+				if (
+					x === 0 ||
+					y === 0 ||
+					x ===
+						MAP_WIDTH - 1 ||
+					y ===
+						MAP_HEIGHT - 1
+				) {
+
+					touchesEdge =
+						true
+				}
+
+				const previousTerritoryId =
+					this.territoryIds[
+						pixelIndex
+					]
+
+				if (
+					previousTerritoryId !== 0
+				) {
+
+					overlaps.set(
+						previousTerritoryId,
+						(
+							overlaps.get(
+								previousTerritoryId
+							)
+							?? 0
+						) + 1
+					)
+				}
+
+				if (
+					x > 0
+				) {
+
+					tryVisit(
+						pixelIndex - 1
+					)
+				}
+
+				if (
+					x <
+					MAP_WIDTH - 1
+				) {
+
+					tryVisit(
+						pixelIndex + 1
+					)
+				}
+
+				if (
+					y > 0
+				) {
+
+					tryVisit(
+						pixelIndex -
+							MAP_WIDTH
+					)
+				}
+
+				if (
+					y <
+					MAP_HEIGHT - 1
+				) {
+
+					tryVisit(
+						pixelIndex +
+							MAP_WIDTH
+					)
+				}
+			}
+
+			/*
+			* Las regiones que no tenían ningún
+			* territorio anterior continúan siendo
+			* simplemente espacio disponible.
+			*/
+			if (
+				overlaps.size === 0
+			) {
+				continue
+			}
+
+			components.push({
+				pixels:
+					queue.slice(
+						0,
+						queueEnd
+					),
+
+				overlaps,
+
+				touchesEdge,
+
+				firstPixel:
+					startPixel,
+			})
+		}
+
+		return components
+	}
+
+
+	// --------------------------------------------------
+	// MAYOR SOLAPAMIENTO
+	// --------------------------------------------------
+
+	private findMainOverlapTerritory(
+		overlaps: Map<number, number>
+	): number {
+
+		let bestTerritoryId =
+			0
+
+		let bestOverlap =
+			-1
+
+		for (
+			const [
+				territoryId,
+				overlap,
+			] of overlaps
+		) {
+
+			if (
+				overlap >
+				bestOverlap
+			) {
+
+				bestTerritoryId =
+					territoryId
+
+				bestOverlap =
+					overlap
+
+				continue
+			}
+
+			/*
+			* Desempate determinista.
+			*/
+			if (
+				overlap ===
+					bestOverlap &&
+				territoryId <
+					bestTerritoryId
+			) {
+
+				bestTerritoryId =
+					territoryId
+			}
+		}
+
+		return bestTerritoryId
+	}
+
+
+	// --------------------------------------------------
+	// COLOR ACTUAL DEL TERRITORIO
+	// --------------------------------------------------
+
+	private getTerritoryColor(
+		territoryId: number
+	): RGBColor {
+
+		const pixels =
+			this.territoryPixels.get(
+				territoryId
+			)
+
+
+		if (
+			pixels === undefined ||
+			pixels.length === 0
+		) {
+
+			return {
+				...NEUTRAL_TERRITORY_COLOR,
+			}
+		}
+
+
+		const imageIndex =
+			pixels[0] * 4
+
+
+		return {
+			r:
+				this.territoryImageData
+					.data[
+						imageIndex
+					],
+
+			g:
+				this.territoryImageData
+					.data[
+						imageIndex + 1
+					],
+
+			b:
+				this.territoryImageData
+					.data[
+						imageIndex + 2
+					],
+		}
 	}
 }
 
