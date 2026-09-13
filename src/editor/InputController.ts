@@ -2,7 +2,8 @@ import type {
     DrawingTool,
     Tool,
     HistoryCommand,
-    Point
+    Point,
+    StrokeCommand,
 } from '../types/editor'
 
 import type {
@@ -107,6 +108,8 @@ export class InputController {
 
     private requiresLocalSave = false
 
+    private splittingTerritoryId: number | null = null
+
     constructor(
         ui: EditorUI,
         camera: CameraController,
@@ -197,6 +200,16 @@ export class InputController {
         this.ui.territorySaveButton.addEventListener(
             'click',
             this.handleTerritorySaveClick
+        )
+
+        this.ui.territoryDivideButton.addEventListener(
+            'click',
+            this.handleDivideTerritoryClick
+        )
+
+        this.ui.territoryDeleteButton.addEventListener(
+            'click',
+            this.handleDeleteTerritoryClick
         )
 
         this.ui.territoryCloseButton.addEventListener(
@@ -406,6 +419,9 @@ export class InputController {
         this.started = false
 
 
+        // -----------------------------
+        // HERRAMIENTAS
+        // -----------------------------
         this.ui.pencilButton.removeEventListener(
             'click',
             this.handlePencilClick
@@ -427,6 +443,9 @@ export class InputController {
         )
 
 
+        // -----------------------------
+        // TOOLBAR
+        // -----------------------------
         this.ui.brushSizeInput.removeEventListener(
             'input',
             this.handleBrushSizeInput
@@ -450,6 +469,16 @@ export class InputController {
         this.ui.territorySaveButton.removeEventListener(
             'click',
             this.handleTerritorySaveClick
+        )
+
+        this.ui.territoryDivideButton.removeEventListener(
+            'click',
+            this.handleDivideTerritoryClick
+        )
+
+        this.ui.territoryDeleteButton.removeEventListener(
+            'click',
+            this.handleDeleteTerritoryClick
         )
 
         this.ui.territoryCloseButton.removeEventListener(
@@ -634,7 +663,8 @@ export class InputController {
         const isGeographyTool =
             tool === 'pencil' ||
             tool === 'eraser' ||
-            tool === 'territory'
+            tool === 'territory' ||
+            tool === 'divide-territory'
 
         if (
             this.geographyLocked &&
@@ -655,6 +685,17 @@ export class InputController {
         if (leavingCountryAssignment) {
 
             this.clearTerritoryPreview()
+        }
+
+        if (
+            this.currentTool ===
+                'divide-territory' &&
+            tool !==
+                'divide-territory'
+        ) {
+
+            this.splittingTerritoryId =
+                null
         }
 
         this.currentTool = tool
@@ -679,10 +720,15 @@ export class InputController {
             tool === 'select'
         )
 
-
         this.ui.workspace.classList.toggle(
             'territory-mode',
             tool === 'territory'
+        )
+
+        this.ui.workspace.classList.toggle(
+            'divide-territory-mode',
+            tool ===
+                'divide-territory'
         )
 
         this.ui.workspace.classList.toggle(
@@ -1029,6 +1075,49 @@ export class InputController {
                 return
             }
 
+            // -----------------------------
+            // DIVIDIR TERRITORIO
+            // -----------------------------
+
+            if (
+                this.currentTool ===
+                    'divide-territory'
+            ) {
+
+                if (
+                    this.splittingTerritoryId ===
+                        null
+                ) {
+
+                    this.setTool(
+                        'select'
+                    )
+
+                    return
+                }
+
+                const brushSize =
+                    Number(
+                        this.ui.brushSizeInput.value
+                    )
+
+                /*
+                * La línea de división siempre
+                * es una frontera nueva.
+                */
+                this.drawing.startStroke(
+                    position.x,
+                    position.y,
+                    'pencil',
+                    brushSize
+                )
+
+                this.ui.workspace.setPointerCapture(
+                    event.pointerId
+                )
+
+                return
+            }
 
             // -----------------------------
             // DIBUJAR
@@ -1182,24 +1271,49 @@ export class InputController {
             const completedStroke =
                 this.drawing.endStroke()
 
-
             if (
                 completedStroke !== null
             ) {
 
-                this.commitHistory(
-                    completedStroke
-                )
+                /*
+                * Si estamos dividiendo un territorio,
+                * este trazo NO debe guardarse como
+                * un stroke normal.
+                *
+                * finishTerritorySplit() se encargará
+                * de validar la división y guardar un
+                * SplitTerritoryCommand.
+                */
+                if (
+                    this.currentTool ===
+                    'divide-territory'
+                ) {
+
+                    void this.finishTerritorySplit(
+                        completedStroke
+                    )
+                }
+
+                else {
+
+                    /*
+                    * Lápiz / goma normales.
+                    */
+                    this.commitHistory(
+                        completedStroke
+                    )
+                }
             }
 
-
+            /*
+            * Este bloque se mantiene igual
+            * independientemente de la herramienta.
+            */
             this.camera.stopPan()
-
 
             this.ui.workspace.classList.remove(
                 'is-panning'
             )
-
 
             if (
                 this.ui.workspace.hasPointerCapture(
@@ -1282,6 +1396,213 @@ export class InputController {
 
         this.ui.statusMessage.textContent =
             'No se pudo crear el territorio'
+    }
+
+
+    // --------------------------------------------------
+    // DIVIDIR TERRITORIO
+    // --------------------------------------------------
+
+    private handleDivideTerritoryClick =
+        () => {
+
+            if (
+                this.geographyLocked
+            ) {
+
+                this.ui.statusMessage.textContent =
+                    'Reabrí la geografía para dividir territorios'
+
+                return
+            }
+
+            if (
+                this.selectedTerritoryId ===
+                null
+            ) {
+                return
+            }
+
+            const territory =
+                this.territoryManager.getById(
+                    this.selectedTerritoryId
+                )
+
+            if (
+                territory === null
+            ) {
+                return
+            }
+
+            this.splittingTerritoryId =
+                territory.id
+
+            this.setTool(
+                'divide-territory'
+            )
+
+            this.ui.territoryPanel.classList.add(
+                'hidden'
+            )
+
+            this.clearTerritoryPreview()
+
+            this.ui.statusMessage.textContent =
+                `Dividiendo "${territory.name}": dibujá una línea de borde a borde`
+        }
+
+ 
+    // --------------------------------------------------
+    // TERMINAR DIVISIÓN DE TERRITORIO
+    // --------------------------------------------------
+    private async finishTerritorySplit(
+        stroke: StrokeCommand
+    ) {
+
+        const territoryId =
+            this.splittingTerritoryId
+
+
+        if (
+            territoryId === null
+        ) {
+            return
+        }
+
+
+        const borderPixels =
+            this.drawing.getPixels()
+
+
+        const result =
+            this.territoryManager.split(
+                territoryId,
+                borderPixels
+            )
+
+
+        // --------------------------------
+        // DIVISIÓN INVÁLIDA
+        // --------------------------------
+
+        if (
+            result.status !==
+            'split'
+        ) {
+
+            /*
+            * El trazo todavía no fue agregado
+            * al historial.
+            *
+            * Reconstruir desde history elimina
+            * automáticamente la línea inválida.
+            */
+            this.rebuildingHistory =
+                true
+
+
+            try {
+
+                await this.redrawHistory()
+            }
+
+            finally {
+
+                this.rebuildingHistory =
+                    false
+            }
+
+
+            if (
+                result.status ===
+                'not-divided'
+            ) {
+
+                this.ui.statusMessage.textContent =
+                    'La línea no divide completamente el territorio. Dibujala de borde a borde.'
+            }
+
+            else if (
+                result.status ===
+                'too-many-parts'
+            ) {
+
+                this.ui.statusMessage.textContent =
+                    'La línea genera más de dos regiones. Intentá una división más simple.'
+            }
+
+            else {
+
+                this.ui.statusMessage.textContent =
+                    'No se pudo dividir el territorio'
+            }
+
+
+            /*
+            * Seguimos en modo división para
+            * que pueda intentarlo otra vez.
+            */
+            return
+        }
+
+
+        // --------------------------------
+        // HEREDAR PAÍS
+        // --------------------------------
+
+        const countryId =
+            this.territoryControlManager
+                .getCountryId(
+                    territoryId
+                )
+
+
+        if (
+            countryId !== null
+        ) {
+
+            this.territoryControlManager.assign(
+                result.newTerritoryId,
+                countryId
+            )
+        }
+
+
+        // --------------------------------
+        // HISTORY
+        // --------------------------------
+
+        this.commitHistory({
+            type:
+                'split-territory',
+
+            territoryId,
+
+            newTerritoryId:
+                result.newTerritoryId,
+
+            stroke,
+        })
+
+
+        // --------------------------------
+        // SALIR DEL MODO DIVISIÓN
+        // --------------------------------
+
+        this.splittingTerritoryId =
+            null
+
+
+        this.clearTerritorySelection()
+
+
+        this.setTool(
+            'select'
+        )
+
+
+        this.ui.statusMessage.textContent =
+            `Territorio dividido: se creó Territorio ${result.newTerritoryId}`
     }
 
 
@@ -1476,6 +1797,96 @@ export class InputController {
         }
 
     
+    // --------------------------------------------------
+    // ELIMINAR TERRITORIO
+    // --------------------------------------------------
+    private handleDeleteTerritoryClick =
+        () => {
+
+            if (
+                this.geographyLocked
+            ) {
+
+                this.ui.statusMessage.textContent =
+                    'Reabrí la geografía para eliminar territorios'
+
+                return
+            }
+
+            if (
+                this.selectedTerritoryId ===
+                null
+            ) {
+                return
+            }
+
+            const territory =
+                this.territoryManager.getById(
+                    this.selectedTerritoryId
+                )
+
+            if (territory === null) {
+                return
+            }
+
+            const shouldDelete =
+                window.confirm(
+                    `¿Eliminar el territorio "${territory.name}"?`
+                )
+
+            if (!shouldDelete) {
+                return
+            }
+
+            const territoryId =
+                territory.id
+
+            const deletedTerritory =
+                this.territoryManager.delete(
+                    territoryId
+                )
+
+            if (
+                deletedTerritory === null
+            ) {
+                return
+            }
+
+            /*
+            * El territorio deja de poder
+            * pertenecer a un país.
+            */
+            this.territoryControlManager.assign(
+                territoryId,
+                null
+            )
+
+            /*
+            * Registrar en Undo / Redo.
+            *
+            * Usamos commitHistory y no
+            * historyManager.push para que
+            * también se actualice:
+            *
+            * ● Sin guardar
+            */
+            this.commitHistory({
+                type:
+                    'delete-territory',
+
+                territoryId,
+            })
+
+
+            this.clearTerritoryPreview()
+
+            this.clearTerritorySelection()
+
+            this.ui.statusMessage.textContent =
+                `Territorio "${deletedTerritory.name}" eliminado`
+        }
+    
+        
     // --------------------------------------------------
     // CREAR PAÍS
     // --------------------------------------------------
@@ -2252,6 +2663,30 @@ export class InputController {
         }
 
         if (
+            command.type === 'split-territory'
+        ) {
+
+            this.ui.statusMessage.textContent =
+                action === 'undo'
+                    ? 'División de territorio deshecha'
+                    : 'División de territorio rehecha'
+
+            return
+        }
+
+        if (
+            command.type === 'delete-territory'
+        ) {
+
+            this.ui.statusMessage.textContent =
+                action === 'undo'
+                    ? `Deshecho: eliminación del Territorio #${command.territoryId}`
+                    : `Rehecho: eliminación del Territorio #${command.territoryId}`
+
+            return
+        }
+
+        if (
             command.type ===
             'assign-territory-country'
         ) {
@@ -2439,6 +2874,73 @@ export class InputController {
                     command.seedY,
                     this.drawing.getPixels()
                 )
+            }
+
+            else if (
+                command.type ===
+                'delete-territory'
+            ) {
+                this.territoryManager.delete(
+                    command.territoryId
+                )
+
+                this.territoryControlManager.assign(
+                    command.territoryId,
+                    null
+                )
+            }
+
+            else if (
+                command.type ===
+                'split-territory'
+            ) {
+                /*
+                * Primero recreamos la frontera.
+                */
+                this.drawing.renderStroke(
+                    command.stroke
+                )
+
+                /*
+                * Después calculamos las dos regiones.
+                *
+                * Pasamos el ID guardado para que
+                * Undo/Redo no cree IDs distintos.
+                */
+                const result =
+                    this.territoryManager.split(
+                        command.territoryId,
+                        this.drawing.getPixels(),
+                        command.newTerritoryId
+                    )
+
+                if (
+                    result.status ===
+                    'split'
+                ) {
+
+                    /*
+                    * El territorio nuevo hereda
+                    * automáticamente el país que
+                    * tenía el original en este punto
+                    * del historial.
+                    */
+                    const countryId =
+                        this.territoryControlManager
+                            .getCountryId(
+                                command.territoryId
+                            )
+
+                    if (
+                        countryId !== null
+                    ) {
+
+                        this.territoryControlManager.assign(
+                            command.newTerritoryId,
+                            countryId
+                        )
+                    }
+                }
             }
 
             // -----------------------------
@@ -3218,7 +3720,8 @@ export class InputController {
         if (
             this.currentTool === 'pencil' ||
             this.currentTool === 'eraser' ||
-            this.currentTool === 'territory'
+            this.currentTool === 'territory' ||
+            this.currentTool === 'divide-territory'
         ) {
 
             this.setTool(
@@ -3263,7 +3766,6 @@ export class InputController {
         const locked =
             this.geographyLocked
 
-
         this.ui.pencilButton.disabled =
             locked
 
@@ -3279,6 +3781,11 @@ export class InputController {
         this.ui.clearButton.disabled =
             locked
 
+        this.ui.territoryDeleteButton.disabled =
+            this.geographyLocked
+
+        this.ui.territoryDivideButton.disabled =
+            this.geographyLocked
 
         this.ui.geographyLockButton.textContent =
             locked
@@ -3303,7 +3810,9 @@ export class InputController {
         return (
             command.type === 'stroke' ||
             command.type === 'create-territory' ||
-            command.type === 'clear'
+            command.type === 'clear' ||
+            command.type === 'delete-territory' ||
+            command.type === 'split-territory'
         )
     }
 

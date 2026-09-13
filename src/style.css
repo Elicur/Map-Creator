@@ -687,3 +687,19 @@ select {
 
     font-weight: 600;
 }
+
+
+#territoryDeleteButton {
+    margin-top: 8px;
+}
+
+
+#territoryDivideButton,
+#territoryDeleteButton {
+    margin-top: 8px;
+}
+
+
+.workspace.divide-territory-mode #borderCanvas {
+    cursor: crosshair;
+}

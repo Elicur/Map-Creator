@@ -16,6 +16,7 @@ export type EditorUI = {
     eraserButton: HTMLButtonElement
     territoryButton: HTMLButtonElement
     selectButton: HTMLButtonElement
+    territoryDivideButton: HTMLButtonElement
 
     clearButton: HTMLButtonElement
     resetViewButton: HTMLButtonElement
@@ -66,6 +67,8 @@ export type EditorUI = {
 
     newProjectButton: HTMLButtonElement
     projectSaveState: HTMLSpanElement
+
+    territoryDeleteButton: HTMLButtonElement
 }
 
 
@@ -362,6 +365,20 @@ export function createUI(): EditorUI {
                     class="territory-save-button"
                 >
                     Guardar nombre
+                </button>
+
+                <button
+                    id="territoryDivideButton"
+                    class="territory-save-button"
+                >
+                    Dividir territorio
+                </button>
+
+                <button
+                    id="territoryDeleteButton"
+                    class="territory-save-button danger-button"
+                >
+                    Eliminar territorio
                 </button>
 
             </aside>
@@ -757,6 +774,16 @@ export function createUI(): EditorUI {
         projectSaveState:
             getElement<HTMLSpanElement>(
                 '#projectSaveState'
+            ),
+
+        territoryDeleteButton:
+            getElement<HTMLButtonElement>(
+                '#territoryDeleteButton'
+            ),
+
+        territoryDivideButton:
+            getElement<HTMLButtonElement>(
+                '#territoryDivideButton'
             ),
     }
 }

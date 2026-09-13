@@ -36,6 +36,20 @@ export type CreateTerritoryResult =
 		}
 
 
+export type SplitTerritoryResult =
+    | {
+        status: 'split'
+        originalTerritoryId: number
+        newTerritoryId: number
+    }
+    | {
+        status:
+            | 'invalid-territory'
+            | 'not-divided'
+            | 'too-many-parts'
+    }
+
+
 export class TerritoryManager {
 
 	private context: CanvasRenderingContext2D
@@ -711,17 +725,14 @@ export class TerritoryManager {
 			const territoryId =
 				this.territoryIds[i]
 
-
 			if (territoryId === 0) {
 				continue
 			}
-
 
 			const currentCount =
 				pixelCounts.get(
 					territoryId
 				)
-
 
 			if (currentCount === undefined) {
 				throw new Error(
@@ -729,16 +740,13 @@ export class TerritoryManager {
 				)
 			}
 
-
 			pixelCounts.set(
 				territoryId,
 				currentCount + 1
 			)
 
-
 			const imageIndex =
 				i * 4
-
 
 			this.territoryImageData.data[
 				imageIndex
@@ -760,14 +768,12 @@ export class TerritoryManager {
 			] = 255
 		}
 
-
 		// -----------------------------
 		// CREAR BUFFERS
 		// -----------------------------
 
 		const writePositions =
 			new Map<number, number>()
-
 
 		for (
 			const [
@@ -783,13 +789,11 @@ export class TerritoryManager {
 				)
 			)
 
-
 			writePositions.set(
 				territoryId,
 				0
 			)
 		}
-
 
 		// -----------------------------
 		// LLENAR BUFFERS
@@ -804,23 +808,19 @@ export class TerritoryManager {
 			const territoryId =
 				this.territoryIds[i]
 
-
 			if (territoryId === 0) {
 				continue
 			}
-
 
 			const pixels =
 				this.territoryPixels.get(
 					territoryId
 				)
 
-
 			const writePosition =
 				writePositions.get(
 					territoryId
 				)
-
 
 			if (
 				pixels === undefined ||
@@ -829,11 +829,9 @@ export class TerritoryManager {
 				continue
 			}
 
-
 			pixels[
 				writePosition
 			] = i
-
 
 			writePositions.set(
 				territoryId,
@@ -841,16 +839,659 @@ export class TerritoryManager {
 			)
 		}
 
-
 		this.context.putImageData(
 			this.territoryImageData,
 			0,
 			0
 		)
 
-
 		this.nextTerritoryId =
 			highestTerritoryId + 1
+	}
+
+
+	// --------------------------------------------------
+	// ELIMINAR TERRITORIO
+	// --------------------------------------------------
+	public delete(
+		territoryId: number
+	): Territory | null {
+
+		const territory =
+			this.territories.get(
+				territoryId
+			)
+
+		if (territory === undefined) {
+			return null
+		}
+
+		const pixels =
+			this.territoryPixels.get(
+				territoryId
+			)
+
+		if (pixels === undefined) {
+			return null
+		}
+
+		/*
+		* Los píxeles dejan de pertenecer
+		* a cualquier territorio.
+		*/
+		for (
+			let i = 0;
+			i < pixels.length;
+			i++
+		) {
+
+			const pixelIndex =
+				pixels[i]
+
+
+			this.territoryIds[
+				pixelIndex
+			] = 0
+		}
+
+		/*
+		* Al eliminar el territorio queremos
+		* que la región vuelva a verse vacía,
+		* no como territorio neutral.
+		*/
+		this.paintPixels(
+			pixels,
+			{
+				r: 255,
+				g: 255,
+				b: 255,
+			}
+		)
+
+		this.territories.delete(
+			territoryId
+		)
+
+		this.territoryPixels.delete(
+			territoryId
+		)
+
+		return {
+			...territory,
+		}
+	}
+
+
+	// --------------------------------------------------
+	// DIVIDIR TERRITORIO
+	// --------------------------------------------------
+	public split(
+		territoryId: number,
+		borderPixels: Uint8ClampedArray,
+		requestedNewTerritoryId:
+			number | null = null
+	): SplitTerritoryResult {
+
+		const territory =
+			this.territories.get(
+				territoryId
+			)
+
+		const originalPixels =
+			this.territoryPixels.get(
+				territoryId
+			)
+
+		if (
+			territory === undefined ||
+			originalPixels === undefined
+		) {
+
+			return {
+				status:
+					'invalid-territory',
+			}
+		}
+
+		const components =
+			this.findTerritoryComponents(
+				territoryId,
+				originalPixels,
+				borderPixels
+			)
+
+		/*
+		* Una línea que no atraviesa
+		* completamente el territorio
+		* sigue dejando una sola región.
+		*/
+		if (
+			components.length < 2
+		) {
+
+			return {
+				status:
+					'not-divided',
+			}
+		}
+
+		/*
+		* Por ahora una división debe
+		* producir exactamente dos partes.
+		*/
+		if (
+			components.length > 2
+		) {
+
+			return {
+				status:
+					'too-many-parts',
+			}
+		}
+
+		/*
+		* Ordenamos por tamaño.
+		*
+		* La región más grande conserva
+		* automáticamente el territorio
+		* original.
+		*
+		* En empate usamos el índice del
+		* primer píxel para que el resultado
+		* sea siempre determinista.
+		*/
+		components.sort(
+			(
+				a,
+				b
+			) => {
+
+				const sizeDifference =
+					b.length -
+					a.length
+
+
+				if (
+					sizeDifference !== 0
+				) {
+					return sizeDifference
+				}
+
+				return (
+					a[0] -
+					b[0]
+				)
+			}
+		)
+
+		const originalComponent =
+			components[0]
+
+		const newComponent =
+			components[1]
+
+		let newTerritoryId:
+			number
+
+		if (
+			requestedNewTerritoryId !==
+			null
+		) {
+
+			if (
+				requestedNewTerritoryId <= 0 ||
+				requestedNewTerritoryId ===
+					territoryId ||
+				this.territories.has(
+					requestedNewTerritoryId
+				)
+			) {
+
+				return {
+					status:
+						'invalid-territory',
+				}
+			}
+
+			newTerritoryId =
+				requestedNewTerritoryId
+
+			this.nextTerritoryId =
+				Math.max(
+					this.nextTerritoryId,
+					newTerritoryId + 1
+				)
+		}
+
+		else {
+
+			newTerritoryId =
+				this.nextTerritoryId++
+		}
+
+		/*
+		* Guardamos el color actual.
+		*
+		* Así, si pertenecía a un país,
+		* ambas partes conservan visualmente
+		* ese color.
+		*/
+		const samplePixel =
+			originalComponent[0]
+
+		const sampleOffset =
+			samplePixel * 4
+
+		const color = {
+
+			r:
+				this.territoryImageData
+					.data[
+						sampleOffset
+					],
+
+			g:
+				this.territoryImageData
+					.data[
+						sampleOffset + 1
+					],
+
+			b:
+				this.territoryImageData
+					.data[
+						sampleOffset + 2
+					],
+		}
+
+		/*
+		* Primero liberamos toda la región
+		* anterior.
+		*/
+		for (
+			let i = 0;
+			i < originalPixels.length;
+			i++
+		) {
+
+			const pixelIndex =
+				originalPixels[i]
+
+
+			this.territoryIds[
+				pixelIndex
+			] = 0
+
+
+			const offset =
+				pixelIndex * 4
+
+
+			this.territoryImageData
+				.data[
+					offset
+				] = 255
+
+			this.territoryImageData
+				.data[
+					offset + 1
+				] = 255
+
+			this.territoryImageData
+				.data[
+					offset + 2
+				] = 255
+
+			this.territoryImageData
+				.data[
+					offset + 3
+				] = 255
+		}
+
+		/*
+		* Región principal:
+		* conserva ID y nombre.
+		*/
+		for (
+			let i = 0;
+			i < originalComponent.length;
+			i++
+		) {
+
+			const pixelIndex =
+				originalComponent[i]
+
+			this.territoryIds[
+				pixelIndex
+			] = territoryId
+
+			const offset =
+				pixelIndex * 4
+
+			this.territoryImageData
+				.data[
+					offset
+				] = color.r
+
+			this.territoryImageData
+				.data[
+					offset + 1
+				] = color.g
+
+			this.territoryImageData
+				.data[
+					offset + 2
+				] = color.b
+
+			this.territoryImageData
+				.data[
+					offset + 3
+				] = 255
+		}
+
+		/*
+		* Región nueva.
+		*/
+		for (
+			let i = 0;
+			i < newComponent.length;
+			i++
+		) {
+
+			const pixelIndex =
+				newComponent[i]
+
+			this.territoryIds[
+				pixelIndex
+			] = newTerritoryId
+
+			const offset =
+				pixelIndex * 4
+
+			this.territoryImageData
+				.data[
+					offset
+				] = color.r
+
+			this.territoryImageData
+				.data[
+					offset + 1
+				] = color.g
+
+			this.territoryImageData
+				.data[
+					offset + 2
+				] = color.b
+
+			this.territoryImageData
+				.data[
+					offset + 3
+				] = 255
+		}
+
+
+		/*
+		* Actualizamos las regiones
+		* almacenadas.
+		*/
+		this.territoryPixels.set(
+			territoryId,
+			originalComponent
+		)
+
+		this.territoryPixels.set(
+			newTerritoryId,
+			newComponent
+		)
+
+		/*
+		* Metadata del nuevo territorio.
+		*/
+		this.territories.set(
+			newTerritoryId,
+			{
+				id:
+					newTerritoryId,
+
+				name:
+					`Territorio ${newTerritoryId}`,
+			}
+		)
+
+		/*
+		* Solo actualizamos Canvas una vez.
+		*/
+		this.context.putImageData(
+			this.territoryImageData,
+			0,
+			0
+		)
+
+		return {
+			status:
+				'split',
+
+			originalTerritoryId:
+				territoryId,
+
+			newTerritoryId,
+		}
+	}
+
+
+	// --------------------------------------------------
+	// ENCONTRAR COMPONENTES DE UN TERRITORIO
+	// --------------------------------------------------
+	private findTerritoryComponents(
+		territoryId: number,
+		territoryPixels: Int32Array,
+		borderPixels: Uint8ClampedArray
+	): Int32Array[] {
+
+		const visited =
+			new Uint8Array(
+				MAP_WIDTH *
+				MAP_HEIGHT
+			)
+
+		const queue =
+			new Int32Array(
+				territoryPixels.length
+			)
+
+		const components:
+			Int32Array[] = []
+
+		const isBorder =
+			(
+				pixelIndex: number
+			) => {
+
+				return (
+					borderPixels[
+						pixelIndex * 4 + 3
+					] > 10
+				)
+			}
+
+		const tryVisit =
+			(
+				pixelIndex: number,
+				queueEnd: number
+			): number => {
+
+				if (
+					pixelIndex < 0 ||
+					pixelIndex >=
+						this.territoryIds.length
+				) {
+					return queueEnd
+				}
+
+				if (
+					visited[
+						pixelIndex
+					] !== 0
+				) {
+					return queueEnd
+				}
+
+				if (
+					this.territoryIds[
+						pixelIndex
+					] !== territoryId
+				) {
+					return queueEnd
+				}
+
+				if (
+					isBorder(
+						pixelIndex
+					)
+				) {
+					return queueEnd
+				}
+
+				visited[
+					pixelIndex
+				] = 1
+
+				queue[
+					queueEnd
+				] = pixelIndex
+
+				return (
+					queueEnd + 1
+				)
+			}
+
+		for (
+			let i = 0;
+			i < territoryPixels.length;
+			i++
+		) {
+
+			const startPixel =
+				territoryPixels[i]
+
+			if (
+				visited[
+					startPixel
+				] !== 0
+			) {
+				continue
+			}
+
+			if (
+				isBorder(
+					startPixel
+				)
+			) {
+				continue
+			}
+
+			let queueStart =
+				0
+
+			let queueEnd =
+				0
+
+			visited[
+				startPixel
+			] = 1
+
+			queue[
+				queueEnd++
+			] = startPixel
+
+			const component:
+				number[] = []
+
+			while (
+				queueStart <
+				queueEnd
+			) {
+
+				const pixelIndex =
+					queue[
+						queueStart++
+					]
+
+				component.push(
+					pixelIndex
+				)
+
+				const x =
+					pixelIndex %
+					MAP_WIDTH
+
+				const y =
+					Math.floor(
+						pixelIndex /
+						MAP_WIDTH
+					)
+
+				if (
+					x > 0
+				) {
+
+					queueEnd =
+						tryVisit(
+							pixelIndex - 1,
+							queueEnd
+						)
+				}
+
+				if (
+					x <
+					MAP_WIDTH - 1
+				) {
+
+					queueEnd =
+						tryVisit(
+							pixelIndex + 1,
+							queueEnd
+						)
+				}
+
+				if (
+					y > 0
+				) {
+
+					queueEnd =
+						tryVisit(
+							pixelIndex -
+								MAP_WIDTH,
+							queueEnd
+						)
+				}
+
+				if (
+					y <
+					MAP_HEIGHT - 1
+				) {
+
+					queueEnd =
+						tryVisit(
+							pixelIndex +
+								MAP_WIDTH,
+							queueEnd
+						)
+				}
+			}
+
+			if (
+				component.length > 0
+			) {
+
+				components.push(
+					Int32Array.from(
+						component
+					)
+				)
+			}
+		}
+
+		return components
 	}
 }
 

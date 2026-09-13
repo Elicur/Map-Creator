@@ -8,6 +8,7 @@ export type Tool =
   | 'territory'
   | 'select'
   | 'assign-country'
+  | 'divide-territory'
 
 
 export type Point = {
@@ -39,6 +40,16 @@ export type CreateTerritoryCommand = {
 
 	seedX: number
 	seedY: number
+}
+
+
+export type SplitTerritoryCommand = {
+    type: 'split-territory'
+
+    territoryId: number
+    newTerritoryId: number
+
+    stroke: StrokeCommand
 }
 
 
@@ -95,12 +106,20 @@ export type AssignTerritoryCountryCommand = {
     countryId: number | null
 }
 
+
+export type DeleteTerritoryCommand = {
+    type: 'delete-territory'
+    territoryId: number
+}
+
 export type HistoryCommand =
   | StrokeCommand
   | ClearCommand
   | CreateTerritoryCommand
+  | SplitTerritoryCommand
   | RenameTerritoryCommand
   | CreateCountryCommand
   | UpdateCountryCommand
   | DeleteCountryCommand
   | AssignTerritoryCountryCommand
+  | DeleteTerritoryCommand
