@@ -55,6 +55,9 @@ import type {
     LocalProjectRecord,
 } from '../project/LocalProjectStore'
 
+import {
+    TimelineManager,
+} from '../timeline/TimelineManager'
 
 const LAST_LOCAL_PROJECT_KEY =
     'map-creator-last-project-id'
@@ -90,6 +93,8 @@ export class InputController {
 
     private projectManager: ProjectManager
 
+    private timelineManager: TimelineManager
+
     private historyBaseProjectJson: string | null = null
 
     private rebuildingHistory = false
@@ -110,6 +115,8 @@ export class InputController {
 
     private splittingTerritoryId: number | null = null
 
+    private timelineInitialized = false
+
     constructor(
         ui: EditorUI,
         camera: CameraController,
@@ -120,7 +127,8 @@ export class InputController {
         countryManager: CountryManager,
         territoryControlManager: TerritoryControlManager,
         projectManager: ProjectManager,
-        localProjectStore: LocalProjectStore
+        localProjectStore: LocalProjectStore,
+        timelineManager: TimelineManager
     ) {
         this.ui = ui
         this.camera = camera
@@ -132,6 +140,7 @@ export class InputController {
         this.territoryControlManager = territoryControlManager
         this.projectManager = projectManager
         this.localProjectStore = localProjectStore
+        this.timelineManager = timelineManager
     }
 
 
@@ -388,6 +397,24 @@ export class InputController {
         window.addEventListener(
             'beforeunload',
             this.handleBeforeUnload
+        )
+
+        // -----------------------------
+        // TIMELINE
+        // -----------------------------
+        this.ui.timelinePreviousButton.addEventListener(
+            'click',
+            this.handleTimelinePreviousClick
+        )
+
+        this.ui.timelineNextButton.addEventListener(
+            'click',
+            this.handleTimelineNextClick
+        )
+
+        this.ui.timelineYearInput.addEventListener(
+            'change',
+            this.handleTimelineYearChange
         )
 
         /*
@@ -648,6 +675,24 @@ export class InputController {
         window.removeEventListener(
             'beforeunload',
             this.handleBeforeUnload
+        )
+
+        // -----------------------------
+        // TIMELINE
+        // -----------------------------
+        this.ui.timelinePreviousButton.removeEventListener(
+            'click',
+            this.handleTimelinePreviousClick
+        )
+
+        this.ui.timelineNextButton.removeEventListener(
+            'click',
+            this.handleTimelineNextClick
+        )
+
+        this.ui.timelineYearInput.removeEventListener(
+            'change',
+            this.handleTimelineYearChange
         )
     }
 
@@ -2132,7 +2177,6 @@ export class InputController {
             this.selectedCountryId =
                 null
 
-
             if (
                 this.currentTool ===
                 'assign-country'
@@ -2144,13 +2188,10 @@ export class InputController {
             }
         }
 
-
         this.ui.countryList.replaceChildren()
-
 
         const countries =
             this.countryManager.getAll()
-
 
         for (
             const country of countries
@@ -2161,14 +2202,11 @@ export class InputController {
                     'button'
                 )
 
-
             item.type =
                 'button'
 
-
             item.className =
                 'country-list-item'
-
 
             if (
                 country.id ===
@@ -2180,36 +2218,29 @@ export class InputController {
                 )
             }
 
-
             const color =
                 document.createElement(
                     'span'
                 )
 
-
             color.className =
                 'country-color'
 
-
             color.style.backgroundColor =
                 country.color
-
 
             const name =
                 document.createElement(
                     'span'
                 )
 
-
             name.textContent =
                 country.name
-
 
             item.append(
                 color,
                 name
             )
-
 
             item.addEventListener(
                 'click',
@@ -2221,12 +2252,10 @@ export class InputController {
                 }
             )
 
-
             this.ui.countryList.append(
                 item
             )
         }
-
 
         this.refreshTerritoryCountrySelect()
     }
@@ -2311,57 +2340,64 @@ export class InputController {
                 return
             }
 
+            const territory =
+                this.territoryManager.getById(
+                    this.selectedTerritoryId
+                )
+
+            if (
+                territory === null
+            ) {
+                return
+            }
 
             const value =
                 this.ui.territoryCountrySelect.value
-
 
             const countryId =
                 value === ''
                     ? null
                     : Number(value)
 
+            const changed =
+                this.setTerritoryCountry(
+                    territory.id,
+                    countryId
+                )
 
-            this.territoryControlManager.assign(
-                this.selectedTerritoryId,
-                countryId
-            )
-
-
-            this.applyTerritoryCountryColor(
-                this.selectedTerritoryId,
-                countryId
-            )
-
-
-            this.commitHistory({
-                type: 'assign-territory-country',
-                territoryId:
-                    this.selectedTerritoryId,
-                countryId,
-            })
-
-
-            if (countryId === null) {
-
-                this.ui.statusMessage.textContent =
-                    'Territorio sin país'
-
+            if (
+                !changed
+            ) {
                 return
             }
 
+            if (
+                countryId === null
+            ) {
+
+                this.ui.statusMessage.textContent =
+                    this.timelineInitialized
+                        ? `${territory.name} queda sin país en el año ${this.timelineManager.year}`
+                        : `${territory.name} quedó sin país`
+
+                return
+            }
 
             const country =
                 this.countryManager.getById(
                     countryId
                 )
 
-
-            if (country !== null) {
-
-                this.ui.statusMessage.textContent =
-                    `Territorio asignado a "${country.name}"`
+            if (
+                country === null
+            ) {
+                return
             }
+
+            this.ui.statusMessage.textContent =
+                this.timelineInitialized
+                    ? `${territory.name} pasa a "${country.name}" en el año ${this.timelineManager.year}`
+                    : `${territory.name} asignado a "${country.name}"`
         }
     
     
@@ -3268,24 +3304,22 @@ export class InputController {
 
         this.clearTerritoryPreview()
 
-
         if (
             this.selectedCountryId === null
         ) {
             return
         }
 
-
         const country =
             this.countryManager.getById(
                 this.selectedCountryId
             )
 
-
-        if (country === null) {
+        if (
+            country === null
+        ) {
             return
         }
-
 
         const territory =
             this.territoryManager.getAt(
@@ -3293,8 +3327,9 @@ export class InputController {
                 y
             )
 
-
-        if (territory === null) {
+        if (
+            territory === null
+        ) {
 
             this.ui.statusMessage.textContent =
                 'No hay ningún territorio aquí'
@@ -3302,20 +3337,14 @@ export class InputController {
             return
         }
 
-
-        const currentCountryId =
-            this.territoryControlManager.getCountryId(
-                territory.id
+        const changed =
+            this.setTerritoryCountry(
+                territory.id,
+                country.id
             )
 
-
-        /*
-        * Evitamos meter acciones inútiles
-        * al historial.
-        */
         if (
-            currentCountryId ===
-            country.id
+            !changed
         ) {
 
             this.ui.statusMessage.textContent =
@@ -3324,25 +3353,15 @@ export class InputController {
             return
         }
 
+        if (
+            this.timelineInitialized
+        ) {
 
-        this.territoryControlManager.assign(
-            territory.id,
-            country.id
-        )
+            this.ui.statusMessage.textContent =
+                `${territory.name} pasa a "${country.name}" en el año ${this.timelineManager.year}`
 
-
-        this.applyTerritoryCountryColor(
-            territory.id,
-            country.id
-        )
-
-
-        this.commitHistory({
-            type: 'assign-territory-country',
-            territoryId: territory.id,
-            countryId: country.id,
-        })
-
+            return
+        }
 
         this.ui.statusMessage.textContent =
             `${territory.name} asignado a "${country.name}"`
@@ -3898,6 +3917,8 @@ export class InputController {
         this.geographyLocked =
             true
 
+        this.initializeTimeline()
+
         this.clearTerritoryPreview()
 
         /*
@@ -3937,6 +3958,16 @@ export class InputController {
         this.geographyLocked =
             false
 
+        if (
+            this.timelineInitialized &&
+            this.currentTool ===
+                'assign-country'
+        ) {
+
+            this.setTool(
+                'select'
+            )
+        }
 
         this.updateGeographyLockUI()
 
@@ -3987,6 +4018,21 @@ export class InputController {
             'geography-locked',
             locked
         )
+
+        this.ui.timelineBar.classList.toggle(
+            'hidden',
+            !locked
+        )
+
+        const historicalPoliticsDisabled =
+            this.timelineInitialized &&
+            !locked
+
+        this.ui.assignCountryButton.disabled =
+            historicalPoliticsDisabled
+
+        this.ui.territoryCountrySelect.disabled =
+            historicalPoliticsDisabled
     }
 
 
@@ -5168,6 +5214,11 @@ export class InputController {
 
         this.historyManager.reset()
 
+        this.timelineManager.reset()
+
+        this.timelineInitialized =
+            false
+
 
         // -----------------------------
         // PROYECTO
@@ -5311,5 +5362,298 @@ export class InputController {
             this.ui.statusMessage.textContent =
                 'No se pudo restaurar el último mapa'
         }
+    }
+
+
+    // --------------------------------------------------
+    // TIMELINE
+    // --------------------------------------------------
+
+    private initializeTimeline() {
+
+        if (
+            this.timelineInitialized
+        ) {
+            return
+        }
+
+        const initialControl =
+            this.territoryManager
+                .getAll()
+                .map(
+                    territory => ({
+                        territoryId:
+                            territory.id,
+
+                        countryId:
+                            this.territoryControlManager
+                                .getCountryId(
+                                    territory.id
+                                ),
+                    })
+                )
+
+        this.timelineManager.setInitialState(
+            {
+                year: 0,
+                month: 1,
+            },
+            initialControl
+        )
+
+        this.timelineInitialized =
+            true
+
+        this.ui.timelineYearInput.value =
+            '0'
+    }
+
+
+    // --------------------------------------------------
+    // APLICAR FECHA DEL TIMELINE
+    // --------------------------------------------------
+
+    private applyTimelineDate() {
+
+        const state =
+            this.timelineManager.getStateAt({
+                year:
+                    this.timelineManager.year,
+
+                month:
+                    this.timelineManager.month,
+            })
+
+        /*
+        * Primero limpiamos todas las
+        * asignaciones visibles.
+        */
+        this.territoryControlManager.reset()
+
+        for (
+            const territory of
+            this.territoryManager.getAll()
+        ) {
+
+            const countryId =
+                state.get(
+                    territory.id
+                )
+                ?? null
+
+            this.territoryControlManager.assign(
+                territory.id,
+                countryId
+            )
+
+            this.applyTerritoryCountryColor(
+                territory.id,
+                countryId
+            )
+        }
+
+        this.refreshCountryUI()
+
+        this.refreshTerritorySelection()
+    }
+
+
+    // --------------------------------------------------
+    // TIMELINE - BOTONES
+    // --------------------------------------------------
+    private handleTimelinePreviousClick =
+        () => {
+
+            const year =
+                this.timelineManager.year -
+                1
+
+            this.timelineManager.setYear(
+                year
+            )
+
+            this.ui.timelineYearInput.value =
+                year.toString()
+
+            this.applyTimelineDate()
+
+            this.ui.statusMessage.textContent =
+                `Año ${year}`
+        }
+
+    
+    private handleTimelineNextClick =
+        () => {
+
+            const year =
+                this.timelineManager.year +
+                1
+
+            this.timelineManager.setYear(
+                year
+            )
+
+            this.ui.timelineYearInput.value =
+                year.toString()
+
+            this.applyTimelineDate()
+
+            this.ui.statusMessage.textContent =
+                `Año ${year}`
+        }
+
+    
+    private handleTimelineYearChange =
+        () => {
+
+            const year =
+                Number(
+                    this.ui.timelineYearInput.value
+                )
+
+            if (
+                !Number.isInteger(
+                    year
+                )
+            ) {
+
+                this.ui.timelineYearInput.value =
+                    this.timelineManager
+                        .year
+                        .toString()
+
+                return
+            }
+
+            this.timelineManager.setYear(
+                year
+            )
+
+            this.applyTimelineDate()
+
+            this.ui.statusMessage.textContent =
+                `Año ${year}`
+        }
+
+    
+    // --------------------------------------------------
+    // CAMBIAR PAÍS DE UN TERRITORIO
+    // --------------------------------------------------
+
+    private setTerritoryCountry(
+        territoryId: number,
+        countryId: number | null
+    ): boolean {
+
+        const territory =
+            this.territoryManager.getById(
+                territoryId
+            )
+
+        if (
+            territory === null
+        ) {
+            return false
+        }
+
+        // --------------------------------
+        // ANTES DEL TIMELINE
+        // --------------------------------
+
+        if (
+            !this.timelineInitialized
+        ) {
+
+            const currentCountryId =
+                this.territoryControlManager
+                    .getCountryId(
+                        territoryId
+                    )
+
+            if (
+                currentCountryId ===
+                countryId
+            ) {
+                return false
+            }
+
+            this.territoryControlManager.assign(
+                territoryId,
+                countryId
+            )
+
+            this.applyTerritoryCountryColor(
+                territoryId,
+                countryId
+            )
+
+            this.commitHistory({
+                type:
+                    'assign-territory-country',
+
+                territoryId,
+
+                countryId,
+            })
+
+            return true
+        }
+
+        // --------------------------------
+        // GEOGRAFÍA REABIERTA
+        // --------------------------------
+        if (
+            !this.geographyLocked
+        ) {
+
+            this.ui.statusMessage.textContent =
+                'Finalizá la geografía para modificar el control histórico'
+
+            return false
+        }
+
+        // --------------------------------
+        // TIMELINE ACTIVO
+        // --------------------------------
+
+        const date = {
+            year:
+                this.timelineManager.year,
+
+            month:
+                this.timelineManager.month,
+        }
+
+        const currentCountryId =
+            this.timelineManager
+                .getTerritoryOwnerAt(
+                    territoryId,
+                    date
+                )
+
+        /*
+        * No creamos un evento inútil.
+        */
+        if (
+            currentCountryId ===
+            countryId
+        ) {
+            return false
+        }
+
+        this.timelineManager
+            .addTerritoryOwnerChangedEvent(
+                date,
+                territoryId,
+                countryId
+            )
+
+        /*
+        * Recalculamos el estado visible
+        * del mapa a partir del timeline.
+        */
+        this.applyTimelineDate()
+
+        return true
     }
 }

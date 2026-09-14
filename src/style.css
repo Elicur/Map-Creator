@@ -703,3 +703,21 @@ select {
 .workspace.divide-territory-mode #borderCanvas {
     cursor: crosshair;
 }
+
+
+.timeline-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-top: 1px solid #333;
+    border-bottom: 1px solid #333;
+}
+
+.timeline-bar.hidden {
+    display: none;
+}
+
+.timeline-bar input {
+    width: 90px;
+}

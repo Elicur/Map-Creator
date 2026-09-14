@@ -69,6 +69,11 @@ export type EditorUI = {
     projectSaveState: HTMLSpanElement
 
     territoryDeleteButton: HTMLButtonElement
+
+    timelinePreviousButton: HTMLButtonElement
+    timelineYearInput: HTMLInputElement
+    timelineNextButton: HTMLButtonElement
+    timelineBar: HTMLDivElement
 }
 
 
@@ -264,6 +269,35 @@ export function createUI(): EditorUI {
                 </div>
 
             </header>
+
+
+            <div
+                id="timelineBar"
+                class="timeline-bar hidden"
+            >
+                <button
+                    id="timelinePreviousButton"
+                    type="button"
+                >
+                    ◀
+                </button>
+
+                <span>Año</span>
+
+                <input
+                    id="timelineYearInput"
+                    type="number"
+                    value="0"
+                    step="1"
+                >
+
+                <button
+                    id="timelineNextButton"
+                    type="button"
+                >
+                    ▶
+                </button>
+            </div>
 
 
             <main
@@ -784,6 +818,26 @@ export function createUI(): EditorUI {
         territoryDivideButton:
             getElement<HTMLButtonElement>(
                 '#territoryDivideButton'
+            ),
+
+        timelinePreviousButton:
+            getElement<HTMLButtonElement>(
+                '#timelinePreviousButton'
+            ),
+
+        timelineYearInput:
+            getElement<HTMLInputElement>(
+                '#timelineYearInput'
+            ),
+
+        timelineNextButton:
+            getElement<HTMLButtonElement>(
+                '#timelineNextButton'
+            ),
+
+        timelineBar:
+            getElement<HTMLDivElement>(
+                '#timelineBar'
             ),
     }
 }

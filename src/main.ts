@@ -44,6 +44,10 @@ import {
     LocalProjectStore,
 } from './project/LocalProjectStore'
 
+import {
+    TimelineManager,
+} from './timeline/TimelineManager'
+
 // --------------------------------------------------
 // INTERFAZ
 // --------------------------------------------------
@@ -93,6 +97,10 @@ const countryManager =
 const territoryControlManager =
     new TerritoryControlManager()
 
+
+const timelineManager =
+    new TimelineManager()
+
 const projectManager =
     new ProjectManager(
         drawing,
@@ -115,7 +123,8 @@ const input =
         countryManager,
         territoryControlManager,
         projectManager,
-        localProjectStore
+        localProjectStore,
+        timelineManager
     )
 
 
