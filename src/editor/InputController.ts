@@ -962,7 +962,7 @@ export class InputController {
             })
 
             this.drawing.clear()
-            this.territoryManager.reset()
+            this.territoryManager.reset(false)
             this.territoryControlManager.reset()
             this.clearTerritorySelection()
             this.clearTerritoryPreview()
@@ -1476,6 +1476,31 @@ export class InputController {
             return result
         }
 
+        // --------------------------------
+        // HEREDAR HISTORIA POLÍTICA
+        // --------------------------------
+        if (
+            this.timelineInitialized &&
+            !this.rebuildingHistory
+        ) {
+
+            const splitDate =
+                this.timelineManager.date
+
+            for (
+                const created of
+                result.createdTerritories
+            ) {
+
+                this.timelineManager
+                    .registerTerritorySplit(
+                        created.territoryId,
+                        created.sourceTerritoryId,
+                        splitDate
+                    )
+            }
+        }
+
         /*
         * Primero capturamos qué país debe
         * heredar cada territorio nuevo.
@@ -1760,27 +1785,57 @@ export class InputController {
             return
         }
 
-
         // --------------------------------
-        // HEREDAR PAÍS
+        // HEREDAR HISTORIA POLÍTICA
         // --------------------------------
 
-        const countryId =
-            this.territoryControlManager
-                .getCountryId(
-                    territoryId
-                )
+        const splitDate =
+            this.timelineInitialized
+                ? this.timelineManager.date
+                : null
 
-
+        /*
+        * Si el timeline ya existe, este nuevo
+        * territorio nace históricamente del
+        * territorio que acabamos de dividir.
+        *
+        * Si el timeline todavía no existe,
+        * no hace falta linaje: ambos territorios
+        * formarán parte del estado inicial.
+        */
         if (
-            countryId !== null
+            splitDate !== null
         ) {
 
-            this.territoryControlManager.assign(
-                result.newTerritoryId,
-                countryId
-            )
+            this.timelineManager
+                .registerTerritorySplit(
+                    result.newTerritoryId,
+                    territoryId,
+                    splitDate
+                )
         }
+
+        const countryId =
+            splitDate !== null
+                ? this.timelineManager
+                    .getTerritoryOwnerAt(
+                        result.newTerritoryId,
+                        splitDate
+                    )
+                : this.territoryControlManager
+                    .getCountryId(
+                        territoryId
+                    )
+
+        this.territoryControlManager.assign(
+            result.newTerritoryId,
+            countryId
+        )
+
+        this.applyTerritoryCountryColor(
+            result.newTerritoryId,
+            countryId
+        )
 
 
         // --------------------------------
@@ -3022,7 +3077,7 @@ export class InputController {
         }
         else {
             this.drawing.clear()
-            this.territoryManager.reset()
+            this.territoryManager.reset(false)
             this.countryManager.reset()
             this.territoryControlManager.reset()
         }
@@ -3079,7 +3134,7 @@ export class InputController {
 
                 this.drawing.clear()
 
-                this.territoryManager.reset()
+                this.territoryManager.reset(false)
 
                 this.territoryControlManager.reset()
             }

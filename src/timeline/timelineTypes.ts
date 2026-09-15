@@ -8,6 +8,14 @@ export type TimelineTerritoryControl = {
     countryId: number | null
 }
 
+export type TerritoryLineage = {
+    territoryId: number
+
+    parentTerritoryId: number
+
+    splitDate: TimelineDate
+}
+
 export type TerritoryOwnerChangedEvent = {
     id: number
 

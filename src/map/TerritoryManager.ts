@@ -135,22 +135,18 @@ export class TerritoryManager {
 	// RESET
 	// --------------------------------------------------
 
-  	public reset() {
+  	public reset(
+		resetIdCounter: boolean = true
+	) {
 
-    /*
-		* 0 significa que el píxel
-		* no pertenece a ningún territorio.
-		*/
-		this.territoryIds.fill(0)
+		this.territoryIds.fill(
+			0
+		)
 
 		this.territories.clear()
 
 		this.territoryPixels.clear()
 
-		/*
-		* RGBA = 255,255,255,255
-		* Fondo blanco opaco.
-		*/
 		this.territoryImageData.data.fill(
 			255
 		)
@@ -159,10 +155,16 @@ export class TerritoryManager {
 			this.territoryImageData,
 			0,
 			0
-    	)
+		)
 
-    	this.nextTerritoryId = 1
-  	}
+		if (
+			resetIdCounter
+		) {
+
+			this.nextTerritoryId =
+				1
+		}
+	}
 
 
 	// --------------------------------------------------
