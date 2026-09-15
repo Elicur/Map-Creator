@@ -48,6 +48,10 @@ import {
     TimelineManager,
 } from './timeline/TimelineManager'
 
+import {
+    TimelineController,
+} from './timeline/TimelineController'
+
 // --------------------------------------------------
 // INTERFAZ
 // --------------------------------------------------
@@ -101,6 +105,14 @@ const territoryControlManager =
 const timelineManager =
     new TimelineManager()
 
+const timelineController =
+    new TimelineController(
+        ui,
+        timelineManager,
+        territoryManager,
+        territoryControlManager
+    )
+
 const projectManager =
     new ProjectManager(
         drawing,
@@ -124,7 +136,7 @@ const input =
         territoryControlManager,
         projectManager,
         localProjectStore,
-        timelineManager
+        timelineController
     )
 
 

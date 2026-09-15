@@ -56,8 +56,12 @@ import type {
 } from '../project/LocalProjectStore'
 
 import {
-    TimelineManager,
-} from '../timeline/TimelineManager'
+    TimelineController,
+} from '../timeline/TimelineController'
+
+import type {
+    TimelineState,
+} from '../timeline/TimelineController'
 
 const LAST_LOCAL_PROJECT_KEY =
     'map-creator-last-project-id'
@@ -93,8 +97,6 @@ export class InputController {
 
     private projectManager: ProjectManager
 
-    private timelineManager: TimelineManager
-
     private historyBaseProjectJson: string | null = null
 
     private rebuildingHistory = false
@@ -115,7 +117,7 @@ export class InputController {
 
     private splittingTerritoryId: number | null = null
 
-    private timelineInitialized = false
+    private timelineController: TimelineController
 
     constructor(
         ui: EditorUI,
@@ -128,7 +130,7 @@ export class InputController {
         territoryControlManager: TerritoryControlManager,
         projectManager: ProjectManager,
         localProjectStore: LocalProjectStore,
-        timelineManager: TimelineManager
+        timelineController: TimelineController
     ) {
         this.ui = ui
         this.camera = camera
@@ -140,7 +142,17 @@ export class InputController {
         this.territoryControlManager = territoryControlManager
         this.projectManager = projectManager
         this.localProjectStore = localProjectStore
-        this.timelineManager = timelineManager
+        this.timelineController = timelineController
+
+        this.timelineController
+            .setStateAppliedHandler(
+                state => {
+
+                    this.applyTimelineState(
+                        state
+                    )
+                }
+            )
     }
 
 
@@ -397,25 +409,7 @@ export class InputController {
         window.addEventListener(
             'beforeunload',
             this.handleBeforeUnload
-        )
-
-        // -----------------------------
-        // TIMELINE
-        // -----------------------------
-        this.ui.timelinePreviousButton.addEventListener(
-            'click',
-            this.handleTimelinePreviousClick
-        )
-
-        this.ui.timelineNextButton.addEventListener(
-            'click',
-            this.handleTimelineNextClick
-        )
-
-        this.ui.timelineYearInput.addEventListener(
-            'change',
-            this.handleTimelineYearChange
-        )
+        )        
 
         /*
          * Dejamos explícitamente sincronizada
@@ -424,6 +418,8 @@ export class InputController {
         this.setTool(
             'pencil'
         )
+
+        this.timelineController.start()
 
         this.updateGeographyLockUI()
 
@@ -677,23 +673,7 @@ export class InputController {
             this.handleBeforeUnload
         )
 
-        // -----------------------------
-        // TIMELINE
-        // -----------------------------
-        this.ui.timelinePreviousButton.removeEventListener(
-            'click',
-            this.handleTimelinePreviousClick
-        )
-
-        this.ui.timelineNextButton.removeEventListener(
-            'click',
-            this.handleTimelineNextClick
-        )
-
-        this.ui.timelineYearInput.removeEventListener(
-            'change',
-            this.handleTimelineYearChange
-        )
+        this.timelineController.stop()
     }
 
 
@@ -1480,23 +1460,20 @@ export class InputController {
         // HEREDAR HISTORIA POLÍTICA
         // --------------------------------
         if (
-            this.timelineInitialized &&
+            this.timelineController
+                .isInitialized &&
             !this.rebuildingHistory
         ) {
-
-            const splitDate =
-                this.timelineManager.date
 
             for (
                 const created of
                 result.createdTerritories
             ) {
 
-                this.timelineManager
+                this.timelineController
                     .registerTerritorySplit(
                         created.territoryId,
-                        created.sourceTerritoryId,
-                        splitDate
+                        created.sourceTerritoryId
                     )
             }
         }
@@ -1789,10 +1766,8 @@ export class InputController {
         // HEREDAR HISTORIA POLÍTICA
         // --------------------------------
 
-        const splitDate =
-            this.timelineInitialized
-                ? this.timelineManager.date
-                : null
+        const historicalSplit =
+            this.timelineController.isInitialized
 
         /*
         * Si el timeline ya existe, este nuevo
@@ -1804,23 +1779,21 @@ export class InputController {
         * formarán parte del estado inicial.
         */
         if (
-            splitDate !== null
+            historicalSplit
         ) {
 
-            this.timelineManager
+            this.timelineController
                 .registerTerritorySplit(
                     result.newTerritoryId,
-                    territoryId,
-                    splitDate
+                    territoryId
                 )
         }
 
         const countryId =
-            splitDate !== null
-                ? this.timelineManager
-                    .getTerritoryOwnerAt(
-                        result.newTerritoryId,
-                        splitDate
+            historicalSplit
+                ? this.timelineController
+                    .getTerritoryOwnerAtCurrentDate(
+                        result.newTerritoryId
                     )
                 : this.territoryControlManager
                     .getCountryId(
@@ -2431,8 +2404,8 @@ export class InputController {
             ) {
 
                 this.ui.statusMessage.textContent =
-                    this.timelineInitialized
-                        ? `${territory.name} queda sin país en el año ${this.timelineManager.year}`
+                    this.timelineController.isInitialized
+                        ? `${territory.name} queda sin país en el año ${this.timelineController.year}`
                         : `${territory.name} quedó sin país`
 
                 return
@@ -2450,8 +2423,8 @@ export class InputController {
             }
 
             this.ui.statusMessage.textContent =
-                this.timelineInitialized
-                    ? `${territory.name} pasa a "${country.name}" en el año ${this.timelineManager.year}`
+                this.timelineController.isInitialized
+                    ? `${territory.name} pasa a "${country.name}" en el año ${this.timelineController.year}`
                     : `${territory.name} asignado a "${country.name}"`
         }
     
@@ -3409,11 +3382,11 @@ export class InputController {
         }
 
         if (
-            this.timelineInitialized
+            this.timelineController.isInitialized
         ) {
 
             this.ui.statusMessage.textContent =
-                `${territory.name} pasa a "${country.name}" en el año ${this.timelineManager.year}`
+                `${territory.name} pasa a "${country.name}" en el año ${this.timelineController.year}`
 
             return
         }
@@ -3972,7 +3945,7 @@ export class InputController {
         this.geographyLocked =
             true
 
-        this.initializeTimeline()
+        this.timelineController.initializeIfNeeded()
 
         this.clearTerritoryPreview()
 
@@ -4014,7 +3987,7 @@ export class InputController {
             false
 
         if (
-            this.timelineInitialized &&
+            this.timelineController.isInitialized &&
             this.currentTool ===
                 'assign-country'
         ) {
@@ -4074,13 +4047,10 @@ export class InputController {
             locked
         )
 
-        this.ui.timelineBar.classList.toggle(
-            'hidden',
-            !locked
-        )
+        this.timelineController.setVisible(locked)
 
         const historicalPoliticsDisabled =
-            this.timelineInitialized &&
+            this.timelineController.isInitialized &&
             !locked
 
         this.ui.assignCountryButton.disabled =
@@ -5269,11 +5239,7 @@ export class InputController {
 
         this.historyManager.reset()
 
-        this.timelineManager.reset()
-
-        this.timelineInitialized =
-            false
-
+        this.timelineController.reset()
 
         // -----------------------------
         // PROYECTO
@@ -5424,65 +5390,10 @@ export class InputController {
     // TIMELINE
     // --------------------------------------------------
 
-    private initializeTimeline() {
+    private applyTimelineState(
+        state: TimelineState
+    ) {
 
-        if (
-            this.timelineInitialized
-        ) {
-            return
-        }
-
-        const initialControl =
-            this.territoryManager
-                .getAll()
-                .map(
-                    territory => ({
-                        territoryId:
-                            territory.id,
-
-                        countryId:
-                            this.territoryControlManager
-                                .getCountryId(
-                                    territory.id
-                                ),
-                    })
-                )
-
-        this.timelineManager.setInitialState(
-            {
-                year: 0,
-                month: 1,
-            },
-            initialControl
-        )
-
-        this.timelineInitialized =
-            true
-
-        this.ui.timelineYearInput.value =
-            '0'
-    }
-
-
-    // --------------------------------------------------
-    // APLICAR FECHA DEL TIMELINE
-    // --------------------------------------------------
-
-    private applyTimelineDate() {
-
-        const state =
-            this.timelineManager.getStateAt({
-                year:
-                    this.timelineManager.year,
-
-                month:
-                    this.timelineManager.month,
-            })
-
-        /*
-        * Primero limpiamos todas las
-        * asignaciones visibles.
-        */
         this.territoryControlManager.reset()
 
         for (
@@ -5512,84 +5423,6 @@ export class InputController {
         this.refreshTerritorySelection()
     }
 
-
-    // --------------------------------------------------
-    // TIMELINE - BOTONES
-    // --------------------------------------------------
-    private handleTimelinePreviousClick =
-        () => {
-
-            const year =
-                this.timelineManager.year -
-                1
-
-            this.timelineManager.setYear(
-                year
-            )
-
-            this.ui.timelineYearInput.value =
-                year.toString()
-
-            this.applyTimelineDate()
-
-            this.ui.statusMessage.textContent =
-                `Año ${year}`
-        }
-
-    
-    private handleTimelineNextClick =
-        () => {
-
-            const year =
-                this.timelineManager.year +
-                1
-
-            this.timelineManager.setYear(
-                year
-            )
-
-            this.ui.timelineYearInput.value =
-                year.toString()
-
-            this.applyTimelineDate()
-
-            this.ui.statusMessage.textContent =
-                `Año ${year}`
-        }
-
-    
-    private handleTimelineYearChange =
-        () => {
-
-            const year =
-                Number(
-                    this.ui.timelineYearInput.value
-                )
-
-            if (
-                !Number.isInteger(
-                    year
-                )
-            ) {
-
-                this.ui.timelineYearInput.value =
-                    this.timelineManager
-                        .year
-                        .toString()
-
-                return
-            }
-
-            this.timelineManager.setYear(
-                year
-            )
-
-            this.applyTimelineDate()
-
-            this.ui.statusMessage.textContent =
-                `Año ${year}`
-        }
-
     
     // --------------------------------------------------
     // CAMBIAR PAÍS DE UN TERRITORIO
@@ -5616,7 +5449,7 @@ export class InputController {
         // --------------------------------
 
         if (
-            !this.timelineInitialized
+            !this.timelineController.isInitialized
         ) {
 
             const currentCountryId =
@@ -5671,44 +5504,10 @@ export class InputController {
         // TIMELINE ACTIVO
         // --------------------------------
 
-        const date = {
-            year:
-                this.timelineManager.year,
-
-            month:
-                this.timelineManager.month,
-        }
-
-        const currentCountryId =
-            this.timelineManager
-                .getTerritoryOwnerAt(
-                    territoryId,
-                    date
-                )
-
-        /*
-        * No creamos un evento inútil.
-        */
-        if (
-            currentCountryId ===
-            countryId
-        ) {
-            return false
-        }
-
-        this.timelineManager
-            .addTerritoryOwnerChangedEvent(
-                date,
+        return this.timelineController
+            .changeTerritoryOwner(
                 territoryId,
                 countryId
             )
-
-        /*
-        * Recalculamos el estado visible
-        * del mapa a partir del timeline.
-        */
-        this.applyTimelineDate()
-
-        return true
     }
 }
