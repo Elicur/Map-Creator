@@ -52,6 +52,14 @@ import {
     TimelineController,
 } from './timeline/TimelineController'
 
+import {
+    ProjectController,
+} from './project/ProjectController'
+
+import {
+    PoliticsController,
+} from './editor/PoliticsController'
+
 // --------------------------------------------------
 // INTERFAZ
 // --------------------------------------------------
@@ -113,6 +121,16 @@ const timelineController =
         territoryControlManager
     )
 
+const politicsController =
+    new PoliticsController(
+        ui,
+        countryManager,
+        territoryManager,
+        territoryControlManager,
+        preview,
+        timelineController
+    )
+
 const projectManager =
     new ProjectManager(
         drawing,
@@ -124,6 +142,14 @@ const projectManager =
 const localProjectStore =
     new LocalProjectStore()
 
+const projectController =
+    new ProjectController(
+        ui,
+        projectManager,
+        localProjectStore,
+        historyManager
+    )
+
 const input =
     new InputController(
         ui,
@@ -134,9 +160,9 @@ const input =
         preview,
         countryManager,
         territoryControlManager,
-        projectManager,
-        localProjectStore,
-        timelineController
+        projectController,
+        timelineController,
+        politicsController
     )
 
 

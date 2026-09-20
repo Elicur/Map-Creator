@@ -39,32 +39,20 @@ import {
 } from '../map/TerritoryControlManager'
 
 import {
-    hexToRgb,
     TERRITORY_CREATION_PREVIEW_COLOR,
 } from '../map/colors'
 
 import {
-    ProjectManager,
-} from '../project/ProjectManager'
-
-import {
-    LocalProjectStore,
-} from '../project/LocalProjectStore'
-
-import type {
-    LocalProjectRecord,
-} from '../project/LocalProjectStore'
+    ProjectController,
+} from '../project/ProjectController'
 
 import {
     TimelineController,
 } from '../timeline/TimelineController'
 
-import type {
-    TimelineState,
-} from '../timeline/TimelineController'
-
-const LAST_LOCAL_PROJECT_KEY =
-    'map-creator-last-project-id'
+import {
+    PoliticsController,
+} from './PoliticsController'
 
 export class InputController {
 
@@ -77,7 +65,7 @@ export class InputController {
 
     private currentTool: Tool = 'pencil'
 
-    private selectedCountryId: number | null = null
+    private politicsController: PoliticsController
 
     private started = false
 
@@ -95,25 +83,9 @@ export class InputController {
 
     private geographyLocked = false
 
-    private projectManager: ProjectManager
-
-    private historyBaseProjectJson: string | null = null
+    private projectController: ProjectController
 
     private rebuildingHistory = false
-
-    private localProjectStore: LocalProjectStore
-
-    private currentLocalProjectId: string | null = null
-
-    private projectDirty = false
-
-    private savedHistoryStateId = 0
-
-    private savedGeographyLocked = false
-
-    private savedProjectName = 'Mi mapa'
-
-    private requiresLocalSave = false
 
     private splittingTerritoryId: number | null = null
 
@@ -128,9 +100,9 @@ export class InputController {
         preview: TerritoryPreviewController,
         countryManager: CountryManager,
         territoryControlManager: TerritoryControlManager,
-        projectManager: ProjectManager,
-        localProjectStore: LocalProjectStore,
-        timelineController: TimelineController
+        projectController: ProjectController,
+        timelineController: TimelineController,
+        politicsController: PoliticsController
     ) {
         this.ui = ui
         this.camera = camera
@@ -140,19 +112,67 @@ export class InputController {
         this.preview = preview
         this.countryManager = countryManager
         this.territoryControlManager = territoryControlManager
-        this.projectManager = projectManager
-        this.localProjectStore = localProjectStore
+        this.projectController = projectController
         this.timelineController = timelineController
+        this.politicsController = politicsController
 
-        this.timelineController
-            .setStateAppliedHandler(
-                state => {
+        this.projectController
+            .setEditorBridge({
+                getGeographyLocked:
+                    () =>
+                        this.geographyLocked,
 
-                    this.applyTimelineState(
-                        state
-                    )
-                }
-            )
+                applyLoadedProject:
+                    geographyLocked => {
+
+                        this.applyLoadedProjectState(
+                            geographyLocked
+                        )
+                    },
+
+                resetForNewProject:
+                    () => {
+
+                        this.resetEditorForNewProject()
+                    },
+            })
+
+        this.politicsController
+            .setEditorBridge({
+                getCurrentTool:
+                    () =>
+                        this.currentTool,
+
+                setTool:
+                    tool => {
+
+                        this.setTool(
+                            tool
+                        )
+                    },
+
+                getSelectedTerritoryId:
+                    () =>
+                        this.selectedTerritoryId,
+
+                clearTerritorySelection:
+                    () => {
+
+                        this.clearTerritorySelection()
+                    },
+
+                commitHistory:
+                    command => {
+
+                        this.commitHistory(
+                            command
+                        )
+                    },
+
+                getGeographyLocked:
+                    () =>
+                        this.geographyLocked,
+            })
     }
 
 
@@ -243,25 +263,6 @@ export class InputController {
             this.handleTerritoryNameKeyDown
         )
 
-        this.ui.countriesButton.addEventListener(
-            'click',
-            this.handleCountriesClick
-        )
-
-        this.ui.countryCloseButton.addEventListener(
-            'click',
-            this.handleCountryCloseClick
-        )
-
-        this.ui.createCountryButton.addEventListener(
-            'click',
-            this.handleCreateCountryClick
-        )
-
-        this.ui.territoryCountrySelect.addEventListener(
-            'change',
-            this.handleTerritoryCountryChange
-        )
 
         // -----------------------------
         // WORKSPACE
@@ -307,15 +308,6 @@ export class InputController {
 
 
         // -----------------------------
-        // DOCUMENTO
-        // -----------------------------
-        document.addEventListener(
-            'pointerdown',
-            this.handleDocumentPointerDown
-        )
-
-
-        // -----------------------------
         // TECLADO
         // -----------------------------
 
@@ -335,82 +327,6 @@ export class InputController {
         )
 
 
-        // ------------------------------
-        // PAÍSES
-        // -----------------------------
-        this.ui.saveCountryButton.addEventListener(
-            'click',
-            this.handleSaveCountryClick
-        )
-
-        this.ui.assignCountryButton.addEventListener(
-            'click',
-            this.handleAssignCountryClick
-        )
-
-        this.ui.deleteCountryButton.addEventListener(
-            'click',
-            this.handleDeleteCountryClick
-        )
-
-        // ------------------------------
-        // EXPORTAR / IMPORTAR MAPA
-        // ------------------------------
-        this.ui.exportMapButton.addEventListener(
-            'click',
-            this.handleExportMapClick
-        )
-
-        this.ui.importMapButton.addEventListener(
-            'click',
-            this.handleImportMapClick
-        )
-
-        this.ui.importMapInput.addEventListener(
-            'change',
-            this.handleImportMapChange
-        )
-
-        // ------------------------------
-        // GUARDADO LOCAL
-        // ------------------------------
-        this.ui.saveLocalProjectButton.addEventListener(
-            'click',
-            this.handleSaveLocalProjectClick
-        )
-
-        this.ui.localProjectsButton.addEventListener(
-            'click',
-            this.handleLocalProjectsClick
-        )
-
-        this.ui.localProjectsCloseButton.addEventListener(
-            'click',
-            this.handleLocalProjectsCloseClick
-        )
-
-        // ------------------------------
-        // PROYECTO
-        // ------------------------------
-
-        this.ui.projectNameInput.addEventListener(
-            'input',
-            this.handleProjectNameInput
-        )
-
-        this.ui.newProjectButton.addEventListener(
-            'click',
-            this.handleNewProjectClick
-        )
-
-        // -----------------------------
-        // ANTES DE CERRAR VENTANA
-        // -----------------------------
-        window.addEventListener(
-            'beforeunload',
-            this.handleBeforeUnload
-        )        
-
         /*
          * Dejamos explícitamente sincronizada
          * la herramienta inicial con la UI.
@@ -421,11 +337,11 @@ export class InputController {
 
         this.timelineController.start()
 
+        this.projectController.start()
+
+        this.politicsController.start()
+
         this.updateGeographyLockUI()
-
-        this.markCurrentStateAsSaved()
-
-        void this.restoreLastLocalProject()
     }
 
 
@@ -514,27 +430,10 @@ export class InputController {
             this.handleTerritoryNameKeyDown
         )
 
-        this.ui.countriesButton.removeEventListener(
-            'click',
-            this.handleCountriesClick
-        )
 
-        this.ui.countryCloseButton.removeEventListener(
-            'click',
-            this.handleCountryCloseClick
-        )
-
-        this.ui.createCountryButton.removeEventListener(
-            'click',
-            this.handleCreateCountryClick
-        )
-
-        this.ui.territoryCountrySelect.removeEventListener(
-            'change',
-            this.handleTerritoryCountryChange
-        )
-
-
+        // -----------------------------
+        // WORKSPACE
+        // -----------------------------
         this.ui.workspace.removeEventListener(
             'pointerdown',
             this.handlePointerDown
@@ -571,15 +470,6 @@ export class InputController {
         )
 
 
-        //------------------------------
-        // DOCUMENTO
-        //------------------------------
-        document.removeEventListener(
-            'pointerdown',
-            this.handleDocumentPointerDown
-        )
-
-
         // -----------------------------
         // TECLADO
         // -----------------------------
@@ -598,82 +488,11 @@ export class InputController {
             this.handleWindowBlur
         )
 
-        // -----------------------------
-        // PAÍSES
-        // -----------------------------
-        this.ui.saveCountryButton.removeEventListener(
-            'click',
-            this.handleSaveCountryClick
-        )
-
-        this.ui.assignCountryButton.removeEventListener(
-            'click',
-            this.handleAssignCountryClick
-        )
-
-        this.ui.deleteCountryButton.removeEventListener(
-            'click',
-            this.handleDeleteCountryClick
-        )
-
-        // ------------------------------
-        // EXPORTAR / IMPORTAR MAPA
-        // ------------------------------
-        this.ui.exportMapButton.removeEventListener(
-            'click',
-            this.handleExportMapClick
-        )
-
-        this.ui.importMapButton.removeEventListener(
-            'click',
-            this.handleImportMapClick
-        )
-
-        this.ui.importMapInput.removeEventListener(
-            'change',
-            this.handleImportMapChange
-        )
-
-        // ------------------------------
-        // GUARDADO LOCAL
-        // ------------------------------
-        this.ui.saveLocalProjectButton.removeEventListener(
-            'click',
-            this.handleSaveLocalProjectClick
-        )
-
-        this.ui.localProjectsButton.removeEventListener(
-            'click',
-            this.handleLocalProjectsClick
-        )
-
-        this.ui.localProjectsCloseButton.removeEventListener(
-            'click',
-            this.handleLocalProjectsCloseClick
-        )
-
-        // ------------------------------
-        // PROYECTO
-        // ------------------------------
-        this.ui.projectNameInput.removeEventListener(
-            'input',
-            this.handleProjectNameInput
-        )
-
-        this.ui.newProjectButton.removeEventListener(
-            'click',
-            this.handleNewProjectClick
-        )
-
-        // -----------------------------
-        // ANTES DE CERRAR VENTANA
-        // -----------------------------
-        window.removeEventListener(
-            'beforeunload',
-            this.handleBeforeUnload
-        )
+        this.politicsController.stop()
 
         this.timelineController.stop()
+
+        this.projectController.stop()
     }
 
 
@@ -703,13 +522,17 @@ export class InputController {
         }
 
         const leavingCountryAssignment =
-            this.currentTool === 'assign-country' &&
-            tool !== 'assign-country'
+            this.currentTool ===
+                'assign-country' &&
+            tool !==
+                'assign-country'
 
+        if (
+            leavingCountryAssignment
+        ) {
 
-        if (leavingCountryAssignment) {
-
-            this.clearTerritoryPreview()
+            this.politicsController
+                .clearAssignmentPreview()
         }
 
         if (
@@ -723,76 +546,111 @@ export class InputController {
                 null
         }
 
-        this.currentTool = tool
+        this.currentTool =
+            tool
 
-        this.ui.pencilButton.classList.toggle(
-            'active',
-            tool === 'pencil'
-        )
+        // --------------------------------
+        // BOTONES
+        // --------------------------------
 
-        this.ui.eraserButton.classList.toggle(
-            'active',
-            tool === 'eraser'
-        )
+        this.ui.pencilButton
+            .classList.toggle(
+                'active',
+                tool === 'pencil'
+            )
 
-        this.ui.territoryButton.classList.toggle(
-            'active',
-            tool === 'territory'
-        )
+        this.ui.eraserButton
+            .classList.toggle(
+                'active',
+                tool === 'eraser'
+            )
 
-        this.ui.selectButton.classList.toggle(
-            'active',
-            tool === 'select'
-        )
+        this.ui.territoryButton
+            .classList.toggle(
+                'active',
+                tool === 'territory'
+            )
 
-        this.ui.workspace.classList.toggle(
-            'territory-mode',
-            tool === 'territory'
-        )
+        this.ui.selectButton
+            .classList.toggle(
+                'active',
+                tool === 'select'
+            )
 
-        this.ui.workspace.classList.toggle(
-            'divide-territory-mode',
-            tool ===
-                'divide-territory'
-        )
+        // --------------------------------
+        // WORKSPACE
+        // --------------------------------
 
-        this.ui.workspace.classList.toggle(
-            'select-mode',
-            tool === 'select'
-        )
+        this.ui.workspace
+            .classList.toggle(
+                'territory-mode',
+                tool === 'territory'
+            )
 
-        this.ui.workspace.classList.toggle(
-            'assign-country-mode',
-            tool === 'assign-country'
-        )
+        this.ui.workspace
+            .classList.toggle(
+                'divide-territory-mode',
+                tool ===
+                    'divide-territory'
+            )
 
+        this.ui.workspace
+            .classList.toggle(
+                'select-mode',
+                tool === 'select'
+            )
 
-        switch (tool) {
+        this.ui.workspace
+            .classList.toggle(
+                'assign-country-mode',
+                tool ===
+                    'assign-country'
+            )
+
+        // --------------------------------
+        // MENSAJE
+        // --------------------------------
+
+        switch (
+            tool
+        ) {
 
             case 'pencil':
+
                 this.ui.statusMessage.textContent =
                     'Herramienta: Lápiz'
+
                 break
 
             case 'eraser':
+
                 this.ui.statusMessage.textContent =
                     'Herramienta: Borrador'
+
                 break
 
             case 'territory':
+
                 this.ui.statusMessage.textContent =
                     'Herramienta: Crear territorio'
+
                 break
 
             case 'select':
+
                 this.ui.statusMessage.textContent =
                     'Herramienta: Seleccionar'
+
                 break
-            
+
             case 'assign-country': {
 
+                const countryName =
+                    this.politicsController
+                        .getSelectedCountryName()
+
                 if (
-                    this.selectedCountryId === null
+                    countryName === null
                 ) {
 
                     this.ui.statusMessage.textContent =
@@ -801,32 +659,23 @@ export class InputController {
                     break
                 }
 
-                const country =
-                    this.countryManager.getById(
-                        this.selectedCountryId
-                    )
-
-                if (country === null) {
-
-                    this.ui.statusMessage.textContent =
-                        'Seleccioná un país para asignar territorios'
-
-                    break
-                }
-
                 this.ui.statusMessage.textContent =
-                    `Asignando territorios a: ${country.name}`
+                    `Asignando territorios a: ${countryName}`
 
                 break
             }
         }
-    
-        if (leavingCountryAssignment) {
 
-            this.refreshCountryUI()
-        }
 
-        this.showSelectedCountry()
+        /*
+        * El PoliticsController actualiza
+        * el botón "Asignar territorios" /
+        * "Finalizar asignación" y cualquier
+        * otra UI política dependiente
+        * de la herramienta actual.
+        */
+        this.politicsController
+            .syncToolUI()
     }
 
 
@@ -879,37 +728,10 @@ export class InputController {
                 return
             }
 
-
             this.clearTerritoryPreview()
+            this.politicsController.clearAssignmentPreview()
         }
 
-    private handleCountriesClick =
-        () => {
-
-            const isOpen =
-                !this.ui.countryPanel.classList.contains(
-                    'hidden'
-                )
-
-            if (isOpen) {
-
-                this.closeCountryPanel()
-
-                return
-            }
-
-            this.refreshCountryUI()
-
-            this.ui.countryPanel.classList.remove(
-                'hidden'
-            )
-        }
-
-    private handleCountryCloseClick =
-        () => {
-
-            this.closeCountryPanel()
-        }
 
     // --------------------------------------------------
     // GROSOR
@@ -946,7 +768,7 @@ export class InputController {
             this.territoryControlManager.reset()
             this.clearTerritorySelection()
             this.clearTerritoryPreview()
-            this.refreshCountryUI()
+            this.politicsController.refreshUI()
 
             this.ui.statusMessage.textContent =
                 'Mapa limpiado'
@@ -1092,7 +914,7 @@ export class InputController {
                 'assign-country'
             ) {
 
-                this.assignSelectedCountryAt(
+                this.politicsController.assignSelectedCountryAt(
                     position.x,
                     position.y
                 )
@@ -1261,7 +1083,7 @@ export class InputController {
                 }
 
 
-                this.scheduleCountryAssignmentPreview(
+                this.politicsController.scheduleAssignmentPreview(
                     position.x,
                     position.y
                 )
@@ -1398,7 +1220,7 @@ export class InputController {
             stroke
         )
 
-        this.refreshCountryUI()
+        this.politicsController.refreshUI()
 
         this.refreshTerritorySelection()
 
@@ -1535,7 +1357,7 @@ export class InputController {
                 inherited.countryId
             )
 
-            this.applyTerritoryCountryColor(
+            this.politicsController.applyTerritoryCountryColor(
                 inherited.territoryId,
                 inherited.countryId
             )
@@ -1805,7 +1627,7 @@ export class InputController {
             countryId
         )
 
-        this.applyTerritoryCountryColor(
+        this.politicsController.applyTerritoryCountryColor(
             result.newTerritoryId,
             countryId
         )
@@ -1918,7 +1740,10 @@ export class InputController {
             'hidden'
         )
 
-        this.refreshTerritoryCountrySelect()
+        this.politicsController
+            .refreshTerritoryCountrySelect(
+                territory.id
+            )
     }
 
 
@@ -1940,6 +1765,11 @@ export class InputController {
 
         this.ui.territoryNameInput.value =
             ''
+        
+        this.politicsController
+            .refreshTerritoryCountrySelect(
+                null
+            )
     }
 
     // --------------------------------------------------
@@ -2128,572 +1958,7 @@ export class InputController {
             this.ui.statusMessage.textContent =
                 `Territorio "${deletedTerritory.name}" eliminado`
         }
-    
-        
-    // --------------------------------------------------
-    // CREAR PAÍS
-    // --------------------------------------------------
-    private handleCreateCountryClick =
-        () => {
 
-            const country =
-                this.countryManager.create(
-                    this.ui.countryNameInput.value,
-                    this.ui.countryColorInput.value
-                )
-
-
-            if (country === null) {
-
-                this.ui.statusMessage.textContent =
-                    'El país debe tener un nombre'
-
-                return
-            }
-
-
-            this.commitHistory({
-                type: 'create-country',
-                countryId: country.id,
-                name: country.name,
-                color: country.color,
-            })
-
-
-            /*
-            * El país recién creado pasa
-            * a ser el país activo para asignar.
-            */
-            this.selectedCountryId =
-                country.id
-
-
-            this.ui.countryNameInput.value =
-                ''
-
-
-            this.refreshCountryUI()
-
-
-            /*
-            * Entramos automáticamente
-            * en modo de asignación.
-            */
-            this.setTool(
-                'assign-country'
-            )
-
-
-            this.ui.statusMessage.textContent =
-                `País "${country.name}" creado. Click en territorios para asignarlos.`
-        }
-    
-    
-    private refreshCountryUI() {
-
-        /*
-        * El país seleccionado pudo desaparecer
-        * debido a Undo.
-        */
-        if (
-            this.selectedCountryId !== null &&
-            this.countryManager.getById(
-                this.selectedCountryId
-            ) === null
-        ) {
-
-            this.selectedCountryId =
-                null
-
-            if (
-                this.currentTool ===
-                'assign-country'
-            ) {
-
-                this.setTool(
-                    'select'
-                )
-            }
-        }
-
-        this.ui.countryList.replaceChildren()
-
-        const countries =
-            this.countryManager.getAll()
-
-        for (
-            const country of countries
-        ) {
-
-            const item =
-                document.createElement(
-                    'button'
-                )
-
-            item.type =
-                'button'
-
-            item.className =
-                'country-list-item'
-
-            if (
-                country.id ===
-                this.selectedCountryId
-            ) {
-
-                item.classList.add(
-                    'selected'
-                )
-            }
-
-            const color =
-                document.createElement(
-                    'span'
-                )
-
-            color.className =
-                'country-color'
-
-            color.style.backgroundColor =
-                country.color
-
-            const name =
-                document.createElement(
-                    'span'
-                )
-
-            name.textContent =
-                country.name
-
-            item.append(
-                color,
-                name
-            )
-
-            item.addEventListener(
-                'click',
-                () => {
-
-                    this.selectCountry(
-                        country.id
-                    )
-                }
-            )
-
-            this.ui.countryList.append(
-                item
-            )
-        }
-
-        this.refreshTerritoryCountrySelect()
-    }
-
-    private refreshTerritoryCountrySelect() {
-
-        const select =
-            this.ui.territoryCountrySelect
-
-
-        select.replaceChildren()
-
-
-        const noCountry =
-            document.createElement(
-                'option'
-            )
-
-
-        noCountry.value = ''
-
-        noCountry.textContent =
-            'Sin país'
-
-
-        select.append(
-            noCountry
-        )
-
-
-        for (
-            const country of
-            this.countryManager.getAll()
-        ) {
-
-            const option =
-                document.createElement(
-                    'option'
-                )
-
-
-            option.value =
-                country.id.toString()
-
-
-            option.textContent =
-                country.name
-
-
-            select.append(
-                option
-            )
-        }
-
-
-        if (
-            this.selectedTerritoryId === null
-        ) {
-            select.value = ''
-            return
-        }
-
-
-        const countryId =
-            this.territoryControlManager.getCountryId(
-                this.selectedTerritoryId
-            )
-
-
-        select.value =
-            countryId === null
-                ? ''
-                : countryId.toString()
-    }
-
-    private handleTerritoryCountryChange =
-        () => {
-
-            if (
-                this.selectedTerritoryId === null
-            ) {
-                return
-            }
-
-            const territory =
-                this.territoryManager.getById(
-                    this.selectedTerritoryId
-                )
-
-            if (
-                territory === null
-            ) {
-                return
-            }
-
-            const value =
-                this.ui.territoryCountrySelect.value
-
-            const countryId =
-                value === ''
-                    ? null
-                    : Number(value)
-
-            const changed =
-                this.setTerritoryCountry(
-                    territory.id,
-                    countryId
-                )
-
-            if (
-                !changed
-            ) {
-                return
-            }
-
-            if (
-                countryId === null
-            ) {
-
-                this.ui.statusMessage.textContent =
-                    this.timelineController.isInitialized
-                        ? `${territory.name} queda sin país en el año ${this.timelineController.year}`
-                        : `${territory.name} quedó sin país`
-
-                return
-            }
-
-            const country =
-                this.countryManager.getById(
-                    countryId
-                )
-
-            if (
-                country === null
-            ) {
-                return
-            }
-
-            this.ui.statusMessage.textContent =
-                this.timelineController.isInitialized
-                    ? `${territory.name} pasa a "${country.name}" en el año ${this.timelineController.year}`
-                    : `${territory.name} asignado a "${country.name}"`
-        }
-    
-    
-    // --------------------------------------------------
-    // SELECCIONAR PAÍS
-    // --------------------------------------------------
-
-    private selectCountry(
-        countryId: number
-    ) {
-
-        const country =
-            this.countryManager.getById(
-                countryId
-            )
-
-
-        if (country === null) {
-            return
-        }
-
-
-        /*
-        * Si estábamos asignando otro país,
-        * dejamos ese modo.
-        */
-        if (
-            this.currentTool ===
-            'assign-country'
-        ) {
-
-            this.setTool(
-                'select'
-            )
-        }
-
-
-        this.selectedCountryId =
-            country.id
-
-
-        this.refreshCountryUI()
-
-        this.showSelectedCountry()
-
-
-        this.ui.statusMessage.textContent =
-            `País seleccionado: ${country.name}`
-    }
-
-
-    // --------------------------------------------------
-    // MOSTRAR PAÍS SELECCIONADO
-    // --------------------------------------------------
-
-    private showSelectedCountry() {
-
-        if (
-            this.selectedCountryId === null
-        ) {
-
-            this.ui.selectedCountryEditor.classList.add(
-                'hidden'
-            )
-
-            return
-        }
-
-
-        const country =
-            this.countryManager.getById(
-                this.selectedCountryId
-            )
-
-
-        if (country === null) {
-
-            this.selectedCountryId =
-                null
-
-            this.ui.selectedCountryEditor.classList.add(
-                'hidden'
-            )
-
-            return
-        }
-
-
-        this.ui.selectedCountryNameInput.value =
-            country.name
-
-
-        this.ui.selectedCountryColorInput.value =
-            country.color
-
-
-        this.ui.selectedCountryEditor.classList.remove(
-            'hidden'
-        )
-
-
-        this.ui.assignCountryButton.textContent =
-            this.currentTool === 'assign-country'
-                ? 'Finalizar asignación'
-                : 'Asignar territorios'
-    }
-
-    
-    // --------------------------------------------------
-    // ASIGNAR COLOR DE PAÍS A TERRITORIO
-    // --------------------------------------------------
-    
-    private applyTerritoryCountryColor(
-        territoryId: number,
-        countryId: number | null
-    ) {
-
-        if (countryId === null) {
-
-            this.territoryManager.setNeutralColor(
-                territoryId
-            )
-
-            return
-        }
-
-
-        const country =
-            this.countryManager.getById(
-                countryId
-            )
-
-
-        if (country === null) {
-            return
-        }
-
-
-        const color =
-            hexToRgb(
-                country.color
-            )
-
-
-        if (color === null) {
-            return
-        }
-
-
-        this.territoryManager.setColor(
-            territoryId,
-            color
-        )
-    }
-
-
-    // --------------------------------------------------
-    // CERRAR PANEL DE PAÍSES
-    // --------------------------------------------------
-
-    private closeCountryPanel() {
-
-        /*
-        * Cerrar el panel mientras estamos
-        * asignando también termina ese modo.
-        */
-        if (
-            this.currentTool ===
-            'assign-country'
-        ) {
-
-            this.setTool(
-                'select'
-            )
-        }
-
-
-        this.selectedCountryId =
-            null
-
-
-        this.clearTerritoryPreview()
-
-
-        this.ui.countryPanel.classList.add(
-            'hidden'
-        )
-
-
-        this.refreshCountryUI()
-    }
-
-
-    // --------------------------------------------------
-    // CLICK FUERA DEL PANEL DE PAÍSES
-    // --------------------------------------------------
-
-    private handleDocumentPointerDown =
-        (event: PointerEvent) => {
-
-            // -----------------------------
-            // PANEL YA CERRADO
-            // -----------------------------
-
-            if (
-                this.ui.countryPanel.classList.contains(
-                    'hidden'
-                )
-            ) {
-                return
-            }
-
-
-            const target =
-                event.target
-
-
-            if (
-                !(target instanceof Element)
-            ) {
-                return
-            }
-
-
-            // -----------------------------
-            // CLICK DENTRO DEL PANEL
-            // -----------------------------
-
-            if (
-                this.ui.countryPanel.contains(
-                    target
-                )
-            ) {
-                return
-            }
-
-
-            // -----------------------------
-            // CLICK EN LA TOOLBAR
-            // -----------------------------
-
-            /*
-            * Cambiar de herramienta no debe
-            * cerrar el panel de países.
-            */
-            if (
-                target.closest(
-                    '.toolbar'
-                ) !== null
-            ) {
-                return
-            }
-
-
-            // -----------------------------
-            // SOLO SE CIERRA EN SELECT
-            // -----------------------------
-
-            if (
-                this.currentTool !==
-                'select'
-            ) {
-                return
-            }
-
-
-            this.closeCountryPanel()
-        }
 
     // --------------------------------------------------
     // ZOOM
@@ -2771,7 +2036,7 @@ export class InputController {
 
             await this.redrawHistory()
 
-            this.updateProjectDirtyState()
+            this.projectController.updateDirtyState()
 
             this.showHistoryMessage(
                 command,
@@ -2836,7 +2101,7 @@ export class InputController {
 
             await this.redrawHistory()
 
-            this.updateProjectDirtyState()
+            this.projectController.updateDirtyState()
 
             this.showHistoryMessage(
                 command,
@@ -3040,13 +2305,21 @@ export class InputController {
         // RESTAURAR ESTADO BASE
         // --------------------------------
 
+        const restoredBase =
+            await this.projectController
+                .restoreHistoryBase()
+
         if (
-            this.historyBaseProjectJson !== null
+            !restoredBase
         ) {
 
-            await this.projectManager.importFromJson(
-                this.historyBaseProjectJson
+            this.drawing.clear()
+            this.territoryManager.reset(
+                false
             )
+
+            this.countryManager.reset()
+            this.territoryControlManager.reset()
         }
         else {
             this.drawing.clear()
@@ -3239,8 +2512,7 @@ export class InputController {
                     command.countryId
                 )
 
-
-                this.applyTerritoryCountryColor(
+                this.politicsController.applyTerritoryCountryColor(
                     command.territoryId,
                     command.countryId
                 )
@@ -3257,7 +2529,7 @@ export class InputController {
                     command.color
                 )
 
-                this.recolorCountryTerritories(
+                this.politicsController.recolorCountryTerritories(
                     command.countryId
                 )
             }
@@ -3293,107 +2565,12 @@ export class InputController {
             }
         }
 
-        if (
-            this.selectedCountryId !== null &&
-            this.countryManager.getById(
-                this.selectedCountryId
-            ) === null
-        ) {
+        this.politicsController
+            .refreshUI()
 
-            this.selectedCountryId =
-                null
-
-
-            if (
-                this.currentTool ===
-                'assign-country'
-            ) {
-
-                this.setTool(
-                    'select'
-                )
-            }
-        }
-
-        this.refreshCountryUI()
-        this.showSelectedCountry()
         this.refreshTerritorySelection()
     }
 
-
-    // --------------------------------------------------
-    // ASIGNAR PAÍS CON CLICK
-    // --------------------------------------------------
-
-    private assignSelectedCountryAt(
-        x: number,
-        y: number
-    ) {
-
-        this.clearTerritoryPreview()
-
-        if (
-            this.selectedCountryId === null
-        ) {
-            return
-        }
-
-        const country =
-            this.countryManager.getById(
-                this.selectedCountryId
-            )
-
-        if (
-            country === null
-        ) {
-            return
-        }
-
-        const territory =
-            this.territoryManager.getAt(
-                x,
-                y
-            )
-
-        if (
-            territory === null
-        ) {
-
-            this.ui.statusMessage.textContent =
-                'No hay ningún territorio aquí'
-
-            return
-        }
-
-        const changed =
-            this.setTerritoryCountry(
-                territory.id,
-                country.id
-            )
-
-        if (
-            !changed
-        ) {
-
-            this.ui.statusMessage.textContent =
-                `${territory.name} ya pertenece a "${country.name}"`
-
-            return
-        }
-
-        if (
-            this.timelineController.isInitialized
-        ) {
-
-            this.ui.statusMessage.textContent =
-                `${territory.name} pasa a "${country.name}" en el año ${this.timelineController.year}`
-
-            return
-        }
-
-        this.ui.statusMessage.textContent =
-            `${territory.name} asignado a "${country.name}"`
-    }
 
     // --------------------------------------------------
     // REFRESCAR SELECCIÓN
@@ -3428,52 +2605,6 @@ export class InputController {
 
 
     // --------------------------------------------------
-    // ACTIVAR / FINALIZAR ASIGNACIÓN
-    // --------------------------------------------------
-
-    private handleAssignCountryClick =
-        () => {
-
-            if (
-                this.selectedCountryId === null
-            ) {
-                return
-            }
-
-
-            if (
-                this.currentTool ===
-                'assign-country'
-            ) {
-
-                this.setTool(
-                    'select'
-                )
-
-
-                this.showSelectedCountry()
-
-
-                this.ui.statusMessage.textContent =
-                    'Asignación de territorios finalizada'
-
-                return
-            }
-
-
-            this.clearTerritorySelection()
-
-
-            this.setTool(
-                'assign-country'
-            )
-
-
-            this.showSelectedCountry()
-        }
-
-
-    // --------------------------------------------------
     // KEY DOWN
     // --------------------------------------------------
 
@@ -3488,47 +2619,31 @@ export class InputController {
                 event.key === 'Escape'
             ) {
 
-                // -----------------------------
-                // TERMINAR ASIGNACIÓN DE PAÍS
-                // -----------------------------
-
+                /*
+                * Primero dejamos que PoliticsController
+                * maneje:
+                *
+                * - salir de assign-country
+                * - cerrar el panel de países
+                */
                 if (
-                    this.currentTool ===
-                    'assign-country'
+                    this.politicsController
+                        .handleEscape()
                 ) {
 
                     event.preventDefault()
 
-                    this.closeCountryPanel()
-
                     return
                 }
 
-
-                // -----------------------------
-                // CERRAR PANEL DE PAÍSES
-                // -----------------------------
-
+                /*
+                * Si PoliticsController no consumió
+                * el Escape, intentamos cerrar el
+                * territorio seleccionado.
+                */
                 if (
-                    !this.ui.countryPanel.classList.contains(
-                        'hidden'
-                    )
-                ) {
-
-                    event.preventDefault()
-
-                    this.closeCountryPanel()
-
-                    return
-                }
-
-
-                // -----------------------------
-                // CERRAR PANEL DE TERRITORIO
-                // -----------------------------
-
-                if (
-                    this.selectedTerritoryId !== null
+                    this.selectedTerritoryId !==
+                    null
                 ) {
 
                     event.preventDefault()
@@ -3629,6 +2744,7 @@ export class InputController {
         () => {
 
             this.clearTerritoryPreview()
+            this.politicsController.clearAssignmentPreview()
             this.drawing.cancelStroke()
             this.camera.stopPan()
 
@@ -3774,151 +2890,6 @@ export class InputController {
 
 
     // --------------------------------------------------
-    // PROGRAMAR PREVIEW DE ASIGNACIÓN
-    // --------------------------------------------------
-
-    private scheduleCountryAssignmentPreview(
-        x: number,
-        y: number
-    ) {
-
-        this.pendingPreviewPosition = {
-            x,
-            y,
-        }
-
-
-        if (
-            this.previewTimer !== null
-        ) {
-            return
-        }
-
-
-        this.previewTimer =
-            window.setTimeout(
-                () => {
-
-                    this.previewTimer =
-                        null
-
-
-                    const position =
-                        this.pendingPreviewPosition
-
-
-                    this.pendingPreviewPosition =
-                        null
-
-
-                    if (
-                        position === null ||
-                        this.currentTool !==
-                        'assign-country' ||
-                        this.selectedCountryId === null
-                    ) {
-
-                        this.preview.clear()
-
-                        return
-                    }
-
-
-                    this.updateCountryAssignmentPreview(
-                        position.x,
-                        position.y
-                    )
-                },
-                50
-            )
-    }
-
-
-    // --------------------------------------------------
-    // ACTUALIZAR PREVIEW DE ASIGNACIÓN
-    // --------------------------------------------------
-
-    private updateCountryAssignmentPreview(
-        x: number,
-        y: number
-    ) {
-
-        if (
-            this.selectedCountryId === null
-        ) {
-
-            this.preview.clear()
-
-            return
-        }
-
-
-        const country =
-            this.countryManager.getById(
-                this.selectedCountryId
-            )
-
-
-        if (country === null) {
-
-            this.preview.clear()
-
-            return
-        }
-
-
-        const territory =
-            this.territoryManager.getAt(
-                x,
-                y
-            )
-
-
-        if (territory === null) {
-
-            this.preview.clear()
-
-            return
-        }
-
-
-        const pixels =
-            this.territoryManager.getRegionPixels(
-                territory.id
-            )
-
-
-        if (pixels === null) {
-
-            this.preview.clear()
-
-            return
-        }
-
-
-        const color =
-            hexToRgb(
-                country.color
-            )
-
-
-        if (color === null) {
-
-            this.preview.clear()
-
-            return
-        }
-
-
-        this.preview.showRegion(
-            pixels,
-            color,
-            120
-        )
-    }
-
-
-    // --------------------------------------------------
     // BLOQUEAR / DESBLOQUEAR GEOGRAFÍA
     // --------------------------------------------------
 
@@ -3970,7 +2941,7 @@ export class InputController {
 
         this.updateGeographyLockUI()
 
-        this.updateProjectDirtyState()
+        this.projectController.updateDirtyState()
 
         this.ui.statusMessage.textContent =
             'Geografía finalizada'
@@ -3999,7 +2970,7 @@ export class InputController {
 
         this.updateGeographyLockUI()
 
-        this.updateProjectDirtyState()
+        this.projectController.updateDirtyState()
 
         this.ui.statusMessage.textContent =
             'Geografía editable'
@@ -4079,1048 +3050,6 @@ export class InputController {
 
 
     // --------------------------------------------------
-    // GUARDAR CAMBIOS DEL PAÍS
-    // --------------------------------------------------
-
-    private handleSaveCountryClick =
-        () => {
-
-            if (
-                this.selectedCountryId === null
-            ) {
-                return
-            }
-
-
-            const country =
-                this.countryManager.getById(
-                    this.selectedCountryId
-                )
-
-
-            if (country === null) {
-                return
-            }
-
-
-            const newName =
-                this.ui.selectedCountryNameInput.value.trim()
-
-
-            const newColor =
-                this.ui.selectedCountryColorInput.value
-
-
-            if (newName.length === 0) {
-
-                this.ui.statusMessage.textContent =
-                    'El país debe tener un nombre'
-
-                return
-            }
-
-
-            if (
-                newName === country.name &&
-                newColor === country.color
-            ) {
-                return
-            }
-
-
-            const updated =
-                this.countryManager.update(
-                    country.id,
-                    newName,
-                    newColor
-                )
-
-
-            if (updated === null) {
-                return
-            }
-
-
-            /*
-            * Si cambió el color, recoloreamos
-            * todos los territorios controlados.
-            */
-            this.recolorCountryTerritories(
-                updated.id
-            )
-
-
-            this.commitHistory({
-                type: 'update-country',
-                countryId: updated.id,
-                name: updated.name,
-                color: updated.color,
-            })
-
-
-            this.refreshCountryUI()
-
-            this.showSelectedCountry()
-
-
-            this.ui.statusMessage.textContent =
-                `País "${updated.name}" actualizado`
-    }
-
-
-    // --------------------------------------------------
-    // RECOLOREAR TERRITORIOS DE UN PAÍS
-    // --------------------------------------------------
-
-    private recolorCountryTerritories(
-        countryId: number
-    ) {
-
-        const territoryIds =
-            this.territoryControlManager
-                .getTerritoryIdsByCountryId(
-                    countryId
-                )
-
-
-        for (
-            const territoryId of territoryIds
-        ) {
-
-            this.applyTerritoryCountryColor(
-                territoryId,
-                countryId
-            )
-        }
-    }
-
-
-    // --------------------------------------------------
-    // ELIMINAR PAÍS
-    // --------------------------------------------------
-
-    private handleDeleteCountryClick =
-        () => {
-
-            if (
-                this.selectedCountryId === null
-            ) {
-                return
-            }
-
-
-            const country =
-                this.countryManager.getById(
-                    this.selectedCountryId
-                )
-
-
-            if (country === null) {
-                return
-            }
-
-
-            /*
-            * Obtenemos primero los territorios
-            * porque después eliminaremos
-            * sus asignaciones.
-            */
-            const territoryIds =
-                this.territoryControlManager
-                    .getTerritoryIdsByCountryId(
-                        country.id
-                    )
-
-
-            for (
-                const territoryId of territoryIds
-            ) {
-
-                this.territoryControlManager.assign(
-                    territoryId,
-                    null
-                )
-
-
-                this.territoryManager.setNeutralColor(
-                    territoryId
-                )
-            }
-
-
-            if (
-                this.currentTool ===
-                'assign-country'
-            ) {
-
-                this.setTool(
-                    'select'
-                )
-            }
-
-
-            this.countryManager.delete(
-                country.id
-            )
-
-
-            this.commitHistory({
-                type: 'delete-country',
-                countryId: country.id,
-            })
-
-
-            const deletedName =
-                country.name
-
-
-            this.selectedCountryId =
-                null
-
-
-            this.refreshCountryUI()
-
-            this.showSelectedCountry()
-
-
-            this.ui.statusMessage.textContent =
-                `País "${deletedName}" eliminado`
-    }
-
-
-    // --------------------------------------------------
-    // EXPORTAR PROYECTO
-    // --------------------------------------------------
-
-    private handleExportMapClick =
-        () => {
-
-            try {
-
-                const json =
-                    this.projectManager.exportToJson(
-                        this.geographyLocked,
-                        this.getProjectName()
-                    )
-
-
-                const blob =
-                    new Blob(
-                        [
-                            json,
-                        ],
-                        {
-                            type:
-                                'application/json',
-                        }
-                    )
-
-
-                const url =
-                    URL.createObjectURL(
-                        blob
-                    )
-
-
-                const link =
-                    document.createElement(
-                        'a'
-                    )
-
-
-                link.href =
-                    url
-
-                // ------------------------------
-                // NOMBRE DE ARCHIVO SEGURO
-                // ------------------------------
-                const safeName =
-                    this.getProjectName()
-                        .replace(
-                            /[^a-z0-9áéíóúüñ_-]+/gi,
-                            '-'
-                        )
-                        .replace(
-                            /^-+|-+$/g,
-                            ''
-                        )
-
-
-                link.download =
-                    `${safeName || 'mapa'}.json`
-
-
-                link.click()
-
-
-                URL.revokeObjectURL(
-                    url
-                )
-
-
-                this.ui.statusMessage.textContent =
-                    'Mapa exportado correctamente'
-            }
-
-            catch (error) {
-
-                console.error(
-                    error
-                )
-
-
-                this.ui.statusMessage.textContent =
-                    'No se pudo exportar el mapa'
-            }
-        }
-
-
-    private handleImportMapClick =
-    () => {
-
-        this.ui.importMapInput.click()
-    }
-
-
-    // --------------------------------------------------
-    // IMPORTAR PROYECTO
-    // --------------------------------------------------
-
-    private handleImportMapChange =
-        async () => {
-
-            const file =
-                this.ui.importMapInput.files?.[0]
-
-
-            if (file === undefined) {
-                return
-            }
-
-            const shouldImport =
-                this.confirmDiscardUnsavedChanges(
-                    `Importar "${file.name}"`
-                )
-
-            if (!shouldImport) {
-
-                this.ui.importMapInput.value =
-                    ''
-
-                return
-            }
-
-            try {
-
-                const json =
-                    await file.text()
-
-                const result =
-                    await this.projectManager.importFromJson(
-                        json
-                    )
-
-                // --------------------------------
-                // EL MAPA IMPORTADO NO PERTENECE
-                // TODAVÍA A INDEXEDDB
-                // --------------------------------
-
-                this.currentLocalProjectId =
-                    null
-
-                this.forgetLastLocalProject()
-
-                this.ui.projectNameInput.value =
-                    result.name
-
-                // --------------------------------
-                // BASELINE DEL UNDO / REDO
-                // --------------------------------
-
-                /*
-                * El proyecto importado se convierte
-                * en el nuevo punto de partida del
-                * Undo / Redo.
-                */
-                this.historyBaseProjectJson =
-                    this.projectManager.exportToJson(
-                        result.geographyLocked,
-                        result.name
-                    )
-
-                /*
-                * Las acciones del proyecto anterior
-                * ya no pertenecen a esta sesión.
-                */
-                this.historyManager.reset()
-
-                this.geographyLocked =
-                    result.geographyLocked
-
-                // --------------------------------
-                // ESTADO VISUAL
-                // --------------------------------
-
-                this.clearTerritoryPreview()
-
-                this.clearTerritorySelection()
-
-                this.selectedCountryId =
-                    null
-
-                /*
-                * Siempre arrancamos en una
-                * herramienta segura después
-                * de importar.
-                */
-                this.setTool(
-                    'select'
-                )
-
-                this.updateGeographyLockUI()
-
-                this.refreshCountryUI()
-
-                this.showSelectedCountry()
-
-                // --------------------------------
-                // ESTADO DE GUARDADO
-                // --------------------------------
-
-                /*
-                * El proyecto importado es nuestro
-                * nuevo estado base.
-                *
-                * Guardamos estos valores para poder
-                * distinguir posteriormente los
-                * cambios hechos sobre el importado.
-                */
-                this.savedHistoryStateId =
-                    this.historyManager.stateId
-
-                this.savedGeographyLocked =
-                    this.geographyLocked
-
-                this.savedProjectName =
-                    this.getProjectName()
-
-                /*
-                * Pero el mapa todavía NO está
-                * almacenado en IndexedDB.
-                *
-                * Por eso debe aparecer como
-                * "Sin guardar".
-                */
-                this.requiresLocalSave =
-                    true
-
-                this.updateProjectDirtyState()
-
-                this.ui.statusMessage.textContent =
-                    `Mapa "${file.name}" importado correctamente`
-            }
-
-            catch (error) {
-
-                console.error(
-                    error
-                )
-
-
-                this.ui.statusMessage.textContent =
-                    'No se pudo importar el mapa'
-            }
-
-            finally {
-
-                /*
-                * Permite volver a seleccionar
-                * el mismo archivo posteriormente.
-                */
-                this.ui.importMapInput.value =
-                    ''
-            }
-        }
-
-
-    private getProjectName(): string {
-
-        const name =
-            this.ui.projectNameInput.value.trim()
-
-        if (
-            name.length === 0
-        ) {
-            return 'Mi mapa'
-        }
-
-        return name
-    }
-
-
-    // --------------------------------------------------
-    // GUARDAR PROYECTO LOCAL
-    // --------------------------------------------------
-
-    private handleSaveLocalProjectClick =
-        async () => {
-
-            try {
-
-                const name =
-                    this.getProjectName()
-
-
-                const json =
-                    this.projectManager.exportToJson(
-                        this.geographyLocked,
-                        name
-                    )
-
-
-                const record =
-                    await this.localProjectStore.save(
-                        this.currentLocalProjectId,
-                        name,
-                        json
-                    )
-
-                this.currentLocalProjectId =
-                    record.id
-
-                this.rememberLastLocalProject(
-                    record.id
-                )
-
-                this.ui.projectNameInput.value =
-                    record.name
-
-                this.requiresLocalSave =
-                    false
-
-                this.markCurrentStateAsSaved()
-
-                this.ui.statusMessage.textContent =
-                    `Mapa "${record.name}" guardado`
-
-
-                if (
-                    !this.ui.localProjectsPanel.classList.contains(
-                        'hidden'
-                    )
-                ) {
-
-                    await this.refreshLocalProjectsUI()
-                }
-            }
-
-            catch (error) {
-
-                console.error(
-                    error
-                )
-
-
-                this.ui.statusMessage.textContent =
-                    'No se pudo guardar el mapa'
-            }
-        }
-    
-
-    private handleLocalProjectsClick =
-        async () => {
-
-            const isOpen =
-                !this.ui.localProjectsPanel.classList.contains(
-                    'hidden'
-                )
-
-
-            if (isOpen) {
-
-                this.ui.localProjectsPanel.classList.add(
-                    'hidden'
-                )
-
-                return
-            }
-
-
-            await this.refreshLocalProjectsUI()
-
-
-            this.ui.localProjectsPanel.classList.remove(
-                'hidden'
-            )
-        }
-
-
-    private handleLocalProjectsCloseClick =
-        () => {
-
-            this.ui.localProjectsPanel.classList.add(
-                'hidden'
-            )
-        }
-
-    
-    // --------------------------------------------------
-    // REFRESCAR LISTA DE PROYECTOS LOCALES
-    // --------------------------------------------------
-    private async refreshLocalProjectsUI() {
-
-        const projects =
-            await this.localProjectStore.getAll()
-
-
-        this.ui.localProjectsList.replaceChildren()
-
-
-        if (
-            projects.length === 0
-        ) {
-
-            const empty =
-                document.createElement(
-                    'span'
-                )
-
-
-            empty.textContent =
-                'Todavía no hay mapas guardados.'
-
-
-            this.ui.localProjectsList.append(
-                empty
-            )
-
-
-            return
-        }
-
-
-        for (
-            const project of projects
-        ) {
-
-            const item =
-                this.createLocalProjectItem(
-                    project
-                )
-
-
-            this.ui.localProjectsList.append(
-                item
-            )
-        }
-    }
-
-
-    private createLocalProjectItem(
-        project: LocalProjectRecord
-    ): HTMLElement {
-
-        const item =
-            document.createElement(
-                'div'
-            )
-
-
-        item.className =
-            'local-project-item'
-
-
-        // -----------------------------
-        // INFORMACIÓN
-        // -----------------------------
-
-        const info =
-            document.createElement(
-                'div'
-            )
-
-
-        info.className =
-            'local-project-info'
-
-
-        const name =
-            document.createElement(
-                'span'
-            )
-
-
-        name.className =
-            'local-project-name'
-
-
-        name.textContent =
-            project.name
-
-
-        const date =
-            document.createElement(
-                'span'
-            )
-
-
-        date.className =
-            'local-project-date'
-
-
-        date.textContent =
-            `Modificado: ${
-                new Date(
-                    project.updatedAt
-                ).toLocaleString()
-            }`
-
-
-        info.append(
-            name,
-            date
-        )
-
-
-        // -----------------------------
-        // ACCIONES
-        // -----------------------------
-
-        const actions =
-            document.createElement(
-                'div'
-            )
-
-
-        actions.className =
-            'local-project-actions'
-
-
-        const loadButton =
-            document.createElement(
-                'button'
-            )
-
-
-        loadButton.type =
-            'button'
-
-        loadButton.textContent =
-            'Abrir'
-
-
-        loadButton.addEventListener(
-            'click',
-            () => {
-
-                void this.loadLocalProject(
-                    project
-                )
-            }
-        )
-
-
-        const deleteButton =
-            document.createElement(
-                'button'
-            )
-
-
-        deleteButton.type =
-            'button'
-
-        deleteButton.textContent =
-            '🗑'
-
-
-        deleteButton.addEventListener(
-            'click',
-            () => {
-
-                void this.deleteLocalProject(
-                    project
-                )
-            }
-        )
-
-
-        actions.append(
-            loadButton,
-            deleteButton
-        )
-
-
-        item.append(
-            info,
-            actions
-        )
-
-
-        return item
-    }
-
-
-    // --------------------------------------------------
-    // CARGAR PROYECTO LOCAL
-    // --------------------------------------------------
-    private async loadLocalProject(
-        project: LocalProjectRecord,
-        askBeforeReplace = true
-    ) {
-
-        if (askBeforeReplace) {
-
-            const shouldLoad =
-                this.confirmDiscardUnsavedChanges(
-                    `Abrir "${project.name}"`
-                )
-
-            if (!shouldLoad) {
-                return
-            }
-        }
-
-        try {
-
-            const result =
-                await this.projectManager.importFromJson(
-                    project.json
-                )
-
-
-            /*
-            * El proyecto cargado pasa a ser
-            * el baseline del nuevo historial.
-            */
-            this.historyBaseProjectJson =
-                this.projectManager.exportToJson(
-                    result.geographyLocked,
-                    result.name
-                )
-
-
-            this.historyManager.reset()
-
-
-            this.geographyLocked =
-                result.geographyLocked
-
-
-            this.currentLocalProjectId =
-                project.id
-
-            this.requiresLocalSave =
-                false
-
-            this.rememberLastLocalProject(
-                project.id
-            )
-
-
-            this.ui.projectNameInput.value =
-                result.name
-
-
-            this.clearTerritoryPreview()
-
-            this.clearTerritorySelection()
-
-
-            this.selectedCountryId =
-                null
-
-
-            this.setTool(
-                'select'
-            )
-
-
-            this.updateGeographyLockUI()
-
-            this.refreshCountryUI()
-
-            this.showSelectedCountry()
-
-
-            this.markCurrentStateAsSaved()
-
-
-            this.ui.localProjectsPanel.classList.add(
-                'hidden'
-            )
-
-
-            this.ui.statusMessage.textContent =
-                `Mapa "${result.name}" cargado`
-        }
-
-        catch (error) {
-
-            console.error(
-                error
-            )
-
-
-            this.ui.statusMessage.textContent =
-                'No se pudo cargar el mapa'
-        }
-    }
-    
-
-
-    // --------------------------------------------------
-    // ELIMINAR PROYECTO LOCAL
-    // --------------------------------------------------
-    private async deleteLocalProject(
-        project: LocalProjectRecord
-    ) {
-
-        const shouldDelete =
-            window.confirm(
-                `¿Eliminar "${project.name}" de los mapas guardados?`
-            )
-
-        if (!shouldDelete) {
-            return
-        }
-
-        try {
-
-            await this.localProjectStore.delete(
-                project.id
-            )
-
-            /*
-            * Si eliminamos del almacenamiento
-            * el proyecto actualmente abierto,
-            * el mapa sigue abierto.
-            *
-            * El próximo Guardar creará nuevamente
-            * un proyecto local.
-            */
-            if (
-                this.currentLocalProjectId ===
-                project.id
-            ) {
-
-                this.currentLocalProjectId =
-                    null
-
-                this.requiresLocalSave =
-                    true
-
-                this.forgetLastLocalProject()
-
-                this.updateProjectDirtyState()
-            }
-
-
-            await this.refreshLocalProjectsUI()
-
-
-            this.ui.statusMessage.textContent =
-                `Mapa "${project.name}" eliminado del almacenamiento`
-        }
-
-        catch (error) {
-
-            console.error(
-                error
-            )
-
-
-            this.ui.statusMessage.textContent =
-                'No se pudo eliminar el mapa'
-        }
-    }
-
-
-    // --------------------------------------------------
-    // ESTADO DEL PROYECTO
-    // --------------------------------------------------
-
-    private updateProjectDirtyState() {
-
-        this.projectDirty =
-            this.requiresLocalSave
-            ||
-            (
-                this.historyManager.stateId !==
-                this.savedHistoryStateId
-            )
-            ||
-            (
-                this.geographyLocked !==
-                this.savedGeographyLocked
-            )
-            ||
-            (
-                this.getProjectName() !==
-                this.savedProjectName
-            )
-
-
-        this.updateProjectSaveStateUI()
-    }
-
-
-    // --------------------------------------------------
-    // MARCAR ESTADO ACTUAL COMO GUARDADO
-    // --------------------------------------------------
-
-    private markCurrentStateAsSaved() {
-
-        this.savedHistoryStateId =
-            this.historyManager.stateId
-
-        this.savedGeographyLocked =
-            this.geographyLocked
-
-        this.savedProjectName =
-            this.getProjectName()
-
-        this.projectDirty =
-            false
-
-        this.updateProjectSaveStateUI()
-    }
-
-
-    // --------------------------------------------------
-    // INDICADOR
-    // --------------------------------------------------
-
-    private updateProjectSaveStateUI() {
-
-        this.ui.projectSaveState.classList.toggle(
-            'dirty',
-            this.projectDirty
-        )
-
-        if (this.projectDirty) {
-
-            this.ui.projectSaveState.textContent =
-                '● Sin guardar'
-
-            return
-        }
-
-        if (
-            this.currentLocalProjectId !== null
-        ) {
-
-            this.ui.projectSaveState.textContent =
-                'Guardado'
-
-            return
-        }
-
-        this.ui.projectSaveState.textContent =
-            'Sin cambios'
-    }
-
-
-    // --------------------------------------------------
     // COMMIT HISTORY
     // --------------------------------------------------
 
@@ -5132,382 +3061,87 @@ export class InputController {
             command
         )
 
-
-        this.updateProjectDirtyState()
-    }
-
-
-    private handleProjectNameInput =
-    () => {
-
-        this.updateProjectDirtyState()
+        this.projectController.updateDirtyState()
     }
 
 
     // --------------------------------------------------
-    // CONFIRMAR PÉRDIDA DE CAMBIOS
+    // APLICAR ESTADO DE PROYECTO CARGADO
     // --------------------------------------------------
+    private applyLoadedProjectState(
+        geographyLocked: boolean
+    ) {
 
-    private confirmDiscardUnsavedChanges(
-        action: string
-    ): boolean {
-
-        if (!this.projectDirty) {
-            return true
-        }
-
-        return window.confirm(
-            `Hay cambios sin guardar.\n\n${action} descartará esos cambios.\n\n¿Continuar?`
-        )
-    }
-
-
-    // --------------------------------------------------
-    // NUEVO MAPA
-    // --------------------------------------------------
-
-    private handleNewProjectClick =
-        () => {
-
-            const shouldCreate =
-                this.confirmDiscardUnsavedChanges(
-                    'Crear un mapa nuevo'
-                )
+        /*
+        * El timeline todavía no se persiste.
+        *
+        * Cada proyecto cargado empieza con
+        * un timeline limpio basado en su
+        * estado político actual.
+        */
+        this.timelineController.reset()
 
 
-            if (!shouldCreate) {
-                return
-            }
+        this.geographyLocked =
+            geographyLocked
 
-
-            this.createNewProject()
-        }
-    
-
-    // --------------------------------------------------
-    // CREAR NUEVO PROYECTO
-    // --------------------------------------------------
-    
-    private createNewProject() {
-
-        // -----------------------------
-        // ESTADO VISUAL
-        // -----------------------------
 
         this.clearTerritoryPreview()
+
+        this.clearTerritorySelection()
+
+        this.setTool(
+            'select'
+        )
+
+        if (
+            geographyLocked
+        ) {
+
+            this.timelineController
+                .initializeIfNeeded()
+        }
+
+        this.updateGeographyLockUI()
+
+        this.politicsController.resetSelection()
+    }
+
+
+    // --------------------------------------------------
+    // REINICIAR EDITOR PARA NUEVO PROYECTO
+    // --------------------------------------------------
+    private resetEditorForNewProject() {
+
+        this.clearTerritoryPreview()
+
         this.clearTerritorySelection()
 
         this.ui.countryPanel.classList.add(
             'hidden'
         )
 
-        this.ui.localProjectsPanel.classList.add(
-            'hidden'
-        )
-
-
-        // -----------------------------
-        // MAPA
-        // -----------------------------
-
         this.drawing.clear()
+
         this.territoryManager.reset()
+
         this.countryManager.reset()
+
         this.territoryControlManager.reset()
-
-
-        // -----------------------------
-        // ESTADO DEL EDITOR
-        // -----------------------------
-
-        this.selectedCountryId =
-            null
 
         this.geographyLocked =
             false
 
-        this.currentLocalProjectId =
-            null
-
-        this.requiresLocalSave =
-            false
-
-        this.forgetLastLocalProject()
-
-        this.historyBaseProjectJson =
-            null
-
-        this.historyManager.reset()
-
         this.timelineController.reset()
-
-        // -----------------------------
-        // PROYECTO
-        // -----------------------------
-
-        this.ui.projectNameInput.value =
-            'Mi mapa'
 
         this.setTool(
             'pencil'
         )
 
         this.updateGeographyLockUI()
-        this.refreshCountryUI()
-        this.showSelectedCountry()
+
+        this.politicsController.resetSelection()
 
         this.camera.resetView()
-
-        /*
-        * El mapa nuevo vacío es nuestro
-        * nuevo estado inicial.
-        */
-        this.markCurrentStateAsSaved()
-
-        this.ui.statusMessage.textContent =
-            'Nuevo mapa creado'
-    }
-
-
-    // --------------------------------------------------
-    // COMPROBAR SI HAY CAMBIOS SIN GUARDAR
-    // --------------------------------------------------
-    private handleBeforeUnload =
-        (event: BeforeUnloadEvent) => {
-
-            if (!this.projectDirty) {
-                return
-            }
-
-            event.preventDefault()
-
-            /*
-            * Los navegadores modernos muestran
-            * su propio texto de confirmación.
-            */
-            event.returnValue =
-                ''
-        }
-
-
-    // --------------------------------------------------
-    // ÚLTIMO PROYECTO LOCAL
-    // --------------------------------------------------
-
-    private rememberLastLocalProject(
-        projectId: string
-    ) {
-
-        localStorage.setItem(
-            LAST_LOCAL_PROJECT_KEY,
-            projectId
-        )
-    }
-
-
-    private forgetLastLocalProject() {
-
-        localStorage.removeItem(
-            LAST_LOCAL_PROJECT_KEY
-        )
-    }
-
-
-    private getLastLocalProjectId():
-        string | null {
-
-        return localStorage.getItem(
-            LAST_LOCAL_PROJECT_KEY
-        )
-    }
-
-
-    // --------------------------------------------------
-    // RESTAURAR ÚLTIMO PROYECTO
-    // --------------------------------------------------
-
-    private async restoreLastLocalProject() {
-
-        const projectId =
-            this.getLastLocalProjectId()
-
-
-        if (projectId === null) {
-            return
-        }
-
-
-        try {
-
-            const project =
-                await this.localProjectStore.getById(
-                    projectId
-                )
-
-
-            /*
-            * Puede ocurrir que localStorage todavía
-            * tenga el ID pero el proyecto haya sido
-            * eliminado de IndexedDB.
-            */
-            if (project === null) {
-
-                this.forgetLastLocalProject()
-
-                return
-            }
-
-
-            await this.loadLocalProject(
-                project,
-                false
-            )
-
-
-            this.ui.statusMessage.textContent =
-                `Mapa "${project.name}" restaurado`
-        }
-
-        catch (error) {
-
-            console.error(
-                'No se pudo restaurar el último mapa',
-                error
-            )
-
-
-            /*
-            * No queremos impedir que arranque el editor
-            * simplemente porque la restauración falló.
-            */
-            this.ui.statusMessage.textContent =
-                'No se pudo restaurar el último mapa'
-        }
-    }
-
-
-    // --------------------------------------------------
-    // TIMELINE
-    // --------------------------------------------------
-
-    private applyTimelineState(
-        state: TimelineState
-    ) {
-
-        this.territoryControlManager.reset()
-
-        for (
-            const territory of
-            this.territoryManager.getAll()
-        ) {
-
-            const countryId =
-                state.get(
-                    territory.id
-                )
-                ?? null
-
-            this.territoryControlManager.assign(
-                territory.id,
-                countryId
-            )
-
-            this.applyTerritoryCountryColor(
-                territory.id,
-                countryId
-            )
-        }
-
-        this.refreshCountryUI()
-
-        this.refreshTerritorySelection()
-    }
-
-    
-    // --------------------------------------------------
-    // CAMBIAR PAÍS DE UN TERRITORIO
-    // --------------------------------------------------
-
-    private setTerritoryCountry(
-        territoryId: number,
-        countryId: number | null
-    ): boolean {
-
-        const territory =
-            this.territoryManager.getById(
-                territoryId
-            )
-
-        if (
-            territory === null
-        ) {
-            return false
-        }
-
-        // --------------------------------
-        // ANTES DEL TIMELINE
-        // --------------------------------
-
-        if (
-            !this.timelineController.isInitialized
-        ) {
-
-            const currentCountryId =
-                this.territoryControlManager
-                    .getCountryId(
-                        territoryId
-                    )
-
-            if (
-                currentCountryId ===
-                countryId
-            ) {
-                return false
-            }
-
-            this.territoryControlManager.assign(
-                territoryId,
-                countryId
-            )
-
-            this.applyTerritoryCountryColor(
-                territoryId,
-                countryId
-            )
-
-            this.commitHistory({
-                type:
-                    'assign-territory-country',
-
-                territoryId,
-
-                countryId,
-            })
-
-            return true
-        }
-
-        // --------------------------------
-        // GEOGRAFÍA REABIERTA
-        // --------------------------------
-        if (
-            !this.geographyLocked
-        ) {
-
-            this.ui.statusMessage.textContent =
-                'Finalizá la geografía para modificar el control histórico'
-
-            return false
-        }
-
-        // --------------------------------
-        // TIMELINE ACTIVO
-        // --------------------------------
-
-        return this.timelineController
-            .changeTerritoryOwner(
-                territoryId,
-                countryId
-            )
     }
 }
