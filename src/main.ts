@@ -60,6 +60,14 @@ import {
     PoliticsController,
 } from './editor/PoliticsController'
 
+import {
+    GeographyController,
+} from './editor/GeographyController'
+
+import {
+    EditorHistoryController,
+} from './history/EditorHistoryController'
+
 // --------------------------------------------------
 // INTERFAZ
 // --------------------------------------------------
@@ -131,6 +139,16 @@ const politicsController =
         timelineController
     )
 
+const geographyController =
+    new GeographyController(
+        ui,
+        drawing,
+        territoryManager,
+        territoryControlManager,
+        preview,
+        timelineController
+    )
+
 const projectManager =
     new ProjectManager(
         drawing,
@@ -138,6 +156,7 @@ const projectManager =
         countryManager,
         territoryControlManager
     )
+
 
 const localProjectStore =
     new LocalProjectStore()
@@ -150,19 +169,33 @@ const projectController =
         historyManager
     )
 
+const historyController =
+    new EditorHistoryController(
+        ui,
+        historyManager,
+        camera,
+        drawing,
+        territoryManager,
+        countryManager,
+        territoryControlManager,
+        projectController,
+        politicsController,
+        geographyController
+    )
+
 const input =
     new InputController(
         ui,
         camera,
         drawing,
         territoryManager,
-        historyManager,
-        preview,
         countryManager,
         territoryControlManager,
         projectController,
         timelineController,
-        politicsController
+        politicsController,
+        geographyController,
+        historyController,
     )
 
 

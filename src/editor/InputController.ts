@@ -1,9 +1,6 @@
 import type {
     DrawingTool,
     Tool,
-    HistoryCommand,
-    Point,
-    StrokeCommand,
 } from '../types/editor'
 
 import type {
@@ -23,24 +20,12 @@ import {
 } from '../map/TerritoryManager'
 
 import {
-    HistoryManager,
-} from '../history/HistoryManager'
-
-import {
-    TerritoryPreviewController,
-} from '../map/TerritoryPreviewController'
-
-import {
     CountryManager,
 } from '../map/CountryManager'
 
 import {
     TerritoryControlManager,
 } from '../map/TerritoryControlManager'
-
-import {
-    TERRITORY_CREATION_PREVIEW_COLOR,
-} from '../map/colors'
 
 import {
     ProjectController,
@@ -54,6 +39,14 @@ import {
     PoliticsController,
 } from './PoliticsController'
 
+import {
+    GeographyController,
+} from './GeographyController'
+
+import {
+    EditorHistoryController,
+} from '../history/EditorHistoryController'
+
 export class InputController {
 
     private ui: EditorUI
@@ -61,7 +54,6 @@ export class InputController {
     private camera: CameraController
     private drawing: DrawingController
     private territoryManager: TerritoryManager
-    private historyManager: HistoryManager
 
     private currentTool: Tool = 'pencil'
 
@@ -69,58 +61,48 @@ export class InputController {
 
     private started = false
 
-    private selectedTerritoryId: number | null = null
-
-    private preview: TerritoryPreviewController
-
-    private pendingPreviewPosition: Point | null = null
-
-    private previewTimer: number | null = null
-
     private countryManager: CountryManager
 
     private territoryControlManager: TerritoryControlManager
 
-    private geographyLocked = false
-
     private projectController: ProjectController
 
-    private rebuildingHistory = false
-
-    private splittingTerritoryId: number | null = null
-
     private timelineController: TimelineController
+
+    private geographyController: GeographyController
+
+    private historyController: EditorHistoryController
 
     constructor(
         ui: EditorUI,
         camera: CameraController,
         drawing: DrawingController,
         territoryManager: TerritoryManager,
-        historyManager: HistoryManager,
-        preview: TerritoryPreviewController,
         countryManager: CountryManager,
         territoryControlManager: TerritoryControlManager,
         projectController: ProjectController,
         timelineController: TimelineController,
-        politicsController: PoliticsController
+        politicsController: PoliticsController,
+        geographyController: GeographyController,
+        historyController: EditorHistoryController
     ) {
         this.ui = ui
         this.camera = camera
         this.drawing = drawing
         this.territoryManager = territoryManager
-        this.historyManager = historyManager
-        this.preview = preview
         this.countryManager = countryManager
         this.territoryControlManager = territoryControlManager
         this.projectController = projectController
         this.timelineController = timelineController
         this.politicsController = politicsController
+        this.geographyController = geographyController
+        this.historyController = historyController
 
         this.projectController
             .setEditorBridge({
                 getGeographyLocked:
                     () =>
-                        this.geographyLocked,
+                        this.geographyController.isLocked,
 
                 applyLoadedProject:
                     geographyLocked => {
@@ -153,25 +135,89 @@ export class InputController {
 
                 getSelectedTerritoryId:
                     () =>
-                        this.selectedTerritoryId,
+                        this.geographyController.selectedTerritoryId,
 
                 clearTerritorySelection:
                     () => {
 
-                        this.clearTerritorySelection()
+                        this.geographyController.clearTerritorySelection()
                     },
 
                 commitHistory:
                     command => {
 
-                        this.commitHistory(
+                        this.historyController.commit(
                             command
                         )
                     },
 
                 getGeographyLocked:
                     () =>
-                        this.geographyLocked,
+                        this.geographyController.isLocked,
+            })
+
+        this.geographyController
+            .setEditorBridge({
+                getCurrentTool:
+                    () =>
+                        this.currentTool,
+
+                setTool:
+                    tool => {
+
+                        this.setTool(
+                            tool
+                        )
+                    },
+
+                commitHistory:
+                    command => {
+
+                        this.historyController.commit(
+                            command
+                        )
+                    },
+
+                updateProjectDirtyState:
+                    () => {
+
+                        this.projectController
+                            .updateDirtyState()
+                    },
+
+                refreshPoliticsUI:
+                    () => {
+
+                        this.politicsController
+                            .refreshUI()
+                    },
+
+                refreshTerritoryCountrySelect:
+                    territoryId => {
+
+                        this.politicsController
+                            .refreshTerritoryCountrySelect(
+                                territoryId
+                            )
+                    },
+
+                redrawHistory:
+                    () =>
+                        this.historyController
+                            .redrawHistory(),
+
+                applyTerritoryCountryColor:
+                    (
+                        territoryId,
+                        countryId
+                    ) => {
+
+                        this.politicsController
+                            .applyTerritoryCountryColor(
+                                territoryId,
+                                countryId
+                            )
+                    },
             })
     }
 
@@ -223,44 +269,9 @@ export class InputController {
             this.handleBrushSizeInput
         )
 
-        this.ui.clearButton.addEventListener(
-            'click',
-            this.handleClearClick
-        )
-
-        this.ui.geographyLockButton.addEventListener(
-            'click',
-            this.handleGeographyLockClick
-        )
-
         this.ui.resetViewButton.addEventListener(
             'click',
             this.handleResetViewClick
-        )
-
-        this.ui.territorySaveButton.addEventListener(
-            'click',
-            this.handleTerritorySaveClick
-        )
-
-        this.ui.territoryDivideButton.addEventListener(
-            'click',
-            this.handleDivideTerritoryClick
-        )
-
-        this.ui.territoryDeleteButton.addEventListener(
-            'click',
-            this.handleDeleteTerritoryClick
-        )
-
-        this.ui.territoryCloseButton.addEventListener(
-            'click',
-            this.handleTerritoryCloseClick
-        )
-
-        this.ui.territoryNameInput.addEventListener(
-            'keydown',
-            this.handleTerritoryNameKeyDown
         )
 
 
@@ -341,7 +352,9 @@ export class InputController {
 
         this.politicsController.start()
 
-        this.updateGeographyLockUI()
+        this.geographyController.start()
+
+        this.geographyController.updateLockUI()
     }
 
 
@@ -388,46 +401,11 @@ export class InputController {
         this.ui.brushSizeInput.removeEventListener(
             'input',
             this.handleBrushSizeInput
-        )
-
-        this.ui.clearButton.removeEventListener(
-            'click',
-            this.handleClearClick
-        )
-
-        this.ui.geographyLockButton.removeEventListener(
-            'click',
-            this.handleGeographyLockClick
-        )
+        )        
 
         this.ui.resetViewButton.removeEventListener(
             'click',
             this.handleResetViewClick
-        )
-
-        this.ui.territorySaveButton.removeEventListener(
-            'click',
-            this.handleTerritorySaveClick
-        )
-
-        this.ui.territoryDivideButton.removeEventListener(
-            'click',
-            this.handleDivideTerritoryClick
-        )
-
-        this.ui.territoryDeleteButton.removeEventListener(
-            'click',
-            this.handleDeleteTerritoryClick
-        )
-
-        this.ui.territoryCloseButton.removeEventListener(
-            'click',
-            this.handleTerritoryCloseClick
-        )
-
-        this.ui.territoryNameInput.removeEventListener(
-            'keydown',
-            this.handleTerritoryNameKeyDown
         )
 
 
@@ -493,6 +471,8 @@ export class InputController {
         this.timelineController.stop()
 
         this.projectController.stop()
+
+        this.geographyController.stop()
     }
 
 
@@ -511,7 +491,7 @@ export class InputController {
             tool === 'divide-territory'
 
         if (
-            this.geographyLocked &&
+            this.geographyController.isLocked &&
             isGeographyTool
         ) {
 
@@ -542,8 +522,7 @@ export class InputController {
                 'divide-territory'
         ) {
 
-            this.splittingTerritoryId =
-                null
+            this.geographyController.cancelTerritorySplit()
         }
 
         this.currentTool =
@@ -728,7 +707,7 @@ export class InputController {
                 return
             }
 
-            this.clearTerritoryPreview()
+            this.geographyController.clearTerritoryPreview()
             this.politicsController.clearAssignmentPreview()
         }
 
@@ -742,36 +721,6 @@ export class InputController {
 
             this.ui.brushSizeValue.textContent =
                 this.ui.brushSizeInput.value
-        }
-
-
-    // --------------------------------------------------
-    // LIMPIAR
-    // --------------------------------------------------
-
-    private handleClearClick =
-        () => {
-
-            // Si la geografía está bloqueada, no permitimos limpiar el mapa.
-            if (this.geographyLocked) {
-                this.ui.statusMessage.textContent =
-                    'La geografía está finalizada'
-                return
-            }
-
-            this.commitHistory({
-                type: 'clear',
-            })
-
-            this.drawing.clear()
-            this.territoryManager.reset(false)
-            this.territoryControlManager.reset()
-            this.clearTerritorySelection()
-            this.clearTerritoryPreview()
-            this.politicsController.refreshUI()
-
-            this.ui.statusMessage.textContent =
-                'Mapa limpiado'
         }
 
 
@@ -808,7 +757,7 @@ export class InputController {
 
             if (wantsToPan) {
 
-                this.clearTerritoryPreview()
+                this.geographyController.clearTerritoryPreview()
                 this.drawing.cancelStroke()
 
                 this.camera.startPan(
@@ -878,7 +827,7 @@ export class InputController {
                 'territory'
             ) {
 
-                this.createTerritory(
+                this.geographyController.createTerritory(
                     position.x,
                     position.y
                 )
@@ -896,7 +845,7 @@ export class InputController {
                 'select'
             ) {
 
-                this.selectTerritory(
+                this.geographyController.selectTerritory(
                     position.x,
                     position.y
                 )
@@ -931,9 +880,21 @@ export class InputController {
                     'divide-territory'
             ) {
 
+                const brushSize =
+                    Number(
+                        this.ui.brushSizeInput.value
+                    )
+
+                const started =
+                    this.geographyController
+                        .startTerritorySplitStroke(
+                            position.x,
+                            position.y,
+                            brushSize
+                        )
+
                 if (
-                    this.splittingTerritoryId ===
-                        null
+                    !started
                 ) {
 
                     this.setTool(
@@ -943,25 +904,10 @@ export class InputController {
                     return
                 }
 
-                const brushSize =
-                    Number(
-                        this.ui.brushSizeInput.value
+                this.ui.workspace
+                    .setPointerCapture(
+                        event.pointerId
                     )
-
-                /*
-                * La línea de división siempre
-                * es una frontera nueva.
-                */
-                this.drawing.startStroke(
-                    position.x,
-                    position.y,
-                    'pencil',
-                    brushSize
-                )
-
-                this.ui.workspace.setPointerCapture(
-                    event.pointerId
-                )
 
                 return
             }
@@ -1046,13 +992,13 @@ export class InputController {
                     )
                 ) {
 
-                    this.clearTerritoryPreview()
+                    this.geographyController.clearTerritoryPreview()
 
                     return
                 }
 
 
-                this.scheduleTerritoryPreview(
+                this.geographyController.scheduleTerritoryPreview(
                     position.x,
                     position.y
                 )
@@ -1077,7 +1023,7 @@ export class InputController {
                     )
                 ) {
 
-                    this.clearTerritoryPreview()
+                    this.geographyController.clearTerritoryPreview()
 
                     return
                 }
@@ -1128,7 +1074,7 @@ export class InputController {
                         'divide-territory'
                 ) {
 
-                    void this.finishTerritorySplit(
+                    void this.geographyController.finishTerritorySplit(
                         completedStroke
                     )
                 }
@@ -1140,7 +1086,7 @@ export class InputController {
                     * debe sincronizar también los
                     * territorios.
                     */
-                    void this.finishBorderStroke(
+                    void this.geographyController.finishBorderStroke(
                         completedStroke
                     )
                 }
@@ -1162,801 +1108,6 @@ export class InputController {
                     event.pointerId
                 )
             }
-        }
-
-    
-    // --------------------------------------------------
-    // TERMINAR EDICIÓN NORMAL DE FRONTERAS
-    // --------------------------------------------------
-
-    private async finishBorderStroke(
-        stroke: StrokeCommand
-    ) {
-
-        const result =
-            this.reconcileTerritoriesAfterBorderChange()
-
-        // --------------------------------
-        // EDICIÓN INVÁLIDA
-        // --------------------------------
-
-        if (
-            result.status ===
-            'open-region'
-        ) {
-
-            /*
-            * El stroke todavía no fue agregado
-            * al historial.
-            *
-            * Reconstruimos el estado anterior y
-            * la línea inválida desaparece.
-            */
-            this.rebuildingHistory =
-                true
-
-            try {
-
-                await this.redrawHistory()
-            }
-
-            finally {
-
-                this.rebuildingHistory =
-                    false
-            }
-
-            this.ui.statusMessage.textContent =
-                'La edición dejaría un territorio abierto. Se descartó el cambio.'
-
-            return
-        }
-
-        /*
-        * Recién ahora sabemos que la modificación
-        * geográfica es válida.
-        */
-        this.commitHistory(
-            stroke
-        )
-
-        this.politicsController.refreshUI()
-
-        this.refreshTerritorySelection()
-
-        if (
-            result.createdTerritories.length > 0
-        ) {
-
-            const createdIds =
-                result.createdTerritories
-                    .map(
-                        item =>
-                            `#${item.territoryId}`
-                    )
-                    .join(
-                        ', '
-                    )
-
-            this.ui.statusMessage.textContent =
-                `Frontera actualizada. Nuevos territorios: ${createdIds}`
-
-            return
-        }
-
-        if (
-            result.deletedTerritoryIds.length > 0
-        ) {
-
-            this.ui.statusMessage.textContent =
-                'Frontera actualizada. Se fusionaron territorios.'
-
-            return
-        }
-
-        this.ui.statusMessage.textContent =
-            'Frontera actualizada'
-    }
-
-
-    // --------------------------------------------------
-    // SINCRONIZAR TERRITORIOS DESPUÉS DE FRONTERAS
-    // --------------------------------------------------
-
-    private reconcileTerritoriesAfterBorderChange() {
-
-        const result =
-            this.territoryManager
-                .reconcileWithBorders(
-                    this.drawing.getPixels()
-                )
-
-        if (
-            result.status !==
-            'reconciled'
-        ) {
-            return result
-        }
-
-        // --------------------------------
-        // HEREDAR HISTORIA POLÍTICA
-        // --------------------------------
-        if (
-            this.timelineController
-                .isInitialized &&
-            !this.rebuildingHistory
-        ) {
-
-            for (
-                const created of
-                result.createdTerritories
-            ) {
-
-                this.timelineController
-                    .registerTerritorySplit(
-                        created.territoryId,
-                        created.sourceTerritoryId
-                    )
-            }
-        }
-
-        /*
-        * Primero capturamos qué país debe
-        * heredar cada territorio nuevo.
-        *
-        * Lo hacemos antes de eliminar
-        * asignaciones antiguas.
-        */
-        const inheritedCountries =
-            result.createdTerritories.map(
-                created => ({
-                    territoryId:
-                        created.territoryId,
-
-                    countryId:
-                        this.territoryControlManager
-                            .getCountryId(
-                                created.sourceTerritoryId
-                            ),
-                })
-            )
-
-        // --------------------------------
-        // TERRITORIOS ELIMINADOS
-        // --------------------------------
-
-        for (
-            const territoryId of
-            result.deletedTerritoryIds
-        ) {
-
-            this.territoryControlManager.assign(
-                territoryId,
-                null
-            )
-        }
-
-        // --------------------------------
-        // TERRITORIOS NUEVOS
-        // --------------------------------
-
-        for (
-            const inherited of
-            inheritedCountries
-        ) {
-
-            if (
-                inherited.countryId ===
-                null
-            ) {
-                continue
-            }
-
-            this.territoryControlManager.assign(
-                inherited.territoryId,
-                inherited.countryId
-            )
-
-            this.politicsController.applyTerritoryCountryColor(
-                inherited.territoryId,
-                inherited.countryId
-            )
-        }
-
-        return result
-    }
-
-
-    // --------------------------------------------------
-    // CREAR TERRITORIO
-    // --------------------------------------------------
-
-    private createTerritory(
-        x: number,
-        y: number
-    ) {
-
-        this.clearTerritoryPreview()
-
-        const result =
-            this.territoryManager.createAt(
-                x,
-                y,
-                this.drawing.getPixels()
-            )
-
-
-        if (
-            result.status === 'created'
-        ) {
-
-            this.commitHistory({
-                type: 'create-territory',
-
-                territoryId:
-                    result.territory.id,
-
-                seedX:
-                    result.seedX,
-
-                seedY:
-                    result.seedY,
-            })
-
-
-            this.ui.statusMessage.textContent =
-                `Territorio #${result.territory.id} creado`
-
-            return
-        }
-
-
-        if (
-            result.status === 'existing'
-        ) {
-
-            this.ui.statusMessage.textContent =
-                `${result.territory.name} (#${result.territory.id})`
-
-            return
-        }
-
-
-        if (
-            result.status === 'not-closed'
-        ) {
-
-            this.ui.statusMessage.textContent =
-                '⚠ La región no está cerrada'
-
-            return
-        }
-
-
-        this.ui.statusMessage.textContent =
-            'No se pudo crear el territorio'
-    }
-
-
-    // --------------------------------------------------
-    // DIVIDIR TERRITORIO
-    // --------------------------------------------------
-
-    private handleDivideTerritoryClick =
-        () => {
-
-            if (
-                this.geographyLocked
-            ) {
-
-                this.ui.statusMessage.textContent =
-                    'Reabrí la geografía para dividir territorios'
-
-                return
-            }
-
-            if (
-                this.selectedTerritoryId ===
-                null
-            ) {
-                return
-            }
-
-            const territory =
-                this.territoryManager.getById(
-                    this.selectedTerritoryId
-                )
-
-            if (
-                territory === null
-            ) {
-                return
-            }
-
-            this.splittingTerritoryId =
-                territory.id
-
-            this.setTool(
-                'divide-territory'
-            )
-
-            this.ui.territoryPanel.classList.add(
-                'hidden'
-            )
-
-            this.clearTerritoryPreview()
-
-            this.ui.statusMessage.textContent =
-                `Dividiendo "${territory.name}": dibujá una línea de borde a borde`
-        }
-
- 
-    // --------------------------------------------------
-    // TERMINAR DIVISIÓN DE TERRITORIO
-    // --------------------------------------------------
-    private async finishTerritorySplit(
-        stroke: StrokeCommand
-    ) {
-
-        const territoryId =
-            this.splittingTerritoryId
-
-
-        if (
-            territoryId === null
-        ) {
-            return
-        }
-
-
-        const borderPixels =
-            this.drawing.getPixels()
-
-
-        const result =
-            this.territoryManager.split(
-                territoryId,
-                borderPixels
-            )
-
-
-        // --------------------------------
-        // DIVISIÓN INVÁLIDA
-        // --------------------------------
-
-        if (
-            result.status !==
-            'split'
-        ) {
-
-            /*
-            * El trazo todavía no fue agregado
-            * al historial.
-            *
-            * Reconstruir desde history elimina
-            * automáticamente la línea inválida.
-            */
-            this.rebuildingHistory =
-                true
-
-
-            try {
-
-                await this.redrawHistory()
-            }
-
-            finally {
-
-                this.rebuildingHistory =
-                    false
-            }
-
-
-            if (
-                result.status ===
-                'not-divided'
-            ) {
-
-                this.ui.statusMessage.textContent =
-                    'La línea no divide completamente el territorio. Dibujala de borde a borde.'
-            }
-
-            else if (
-                result.status ===
-                'too-many-parts'
-            ) {
-
-                this.ui.statusMessage.textContent =
-                    'La línea genera más de dos regiones. Intentá una división más simple.'
-            }
-
-            else {
-
-                this.ui.statusMessage.textContent =
-                    'No se pudo dividir el territorio'
-            }
-
-
-            /*
-            * Seguimos en modo división para
-            * que pueda intentarlo otra vez.
-            */
-            return
-        }
-
-        // --------------------------------
-        // HEREDAR HISTORIA POLÍTICA
-        // --------------------------------
-
-        const historicalSplit =
-            this.timelineController.isInitialized
-
-        /*
-        * Si el timeline ya existe, este nuevo
-        * territorio nace históricamente del
-        * territorio que acabamos de dividir.
-        *
-        * Si el timeline todavía no existe,
-        * no hace falta linaje: ambos territorios
-        * formarán parte del estado inicial.
-        */
-        if (
-            historicalSplit
-        ) {
-
-            this.timelineController
-                .registerTerritorySplit(
-                    result.newTerritoryId,
-                    territoryId
-                )
-        }
-
-        const countryId =
-            historicalSplit
-                ? this.timelineController
-                    .getTerritoryOwnerAtCurrentDate(
-                        result.newTerritoryId
-                    )
-                : this.territoryControlManager
-                    .getCountryId(
-                        territoryId
-                    )
-
-        this.territoryControlManager.assign(
-            result.newTerritoryId,
-            countryId
-        )
-
-        this.politicsController.applyTerritoryCountryColor(
-            result.newTerritoryId,
-            countryId
-        )
-
-
-        // --------------------------------
-        // HISTORY
-        // --------------------------------
-
-        this.commitHistory({
-            type:
-                'split-territory',
-
-            territoryId,
-
-            newTerritoryId:
-                result.newTerritoryId,
-
-            stroke,
-        })
-
-
-        // --------------------------------
-        // SALIR DEL MODO DIVISIÓN
-        // --------------------------------
-
-        this.splittingTerritoryId =
-            null
-
-
-        this.clearTerritorySelection()
-
-
-        this.setTool(
-            'select'
-        )
-
-
-        this.ui.statusMessage.textContent =
-            `Territorio dividido: se creó Territorio ${result.newTerritoryId}`
-    }
-
-
-    // --------------------------------------------------
-    // SELECCIONAR TERRITORIO
-    // --------------------------------------------------
-
-    private selectTerritory(
-        x: number,
-        y: number
-    ) {
-
-        const territory =
-            this.territoryManager.getAt(
-                x,
-                y
-            )
-
-        if (territory === null) {
-
-            this.clearTerritorySelection()
-
-            this.ui.statusMessage.textContent =
-                'No hay ningún territorio aquí'
-
-            return
-        }
-
-        this.selectedTerritoryId =
-            territory.id
-
-        this.showSelectedTerritory()
-
-        this.ui.statusMessage.textContent =
-            `${territory.name} (#${territory.id})`
-    }
-
-
-    // --------------------------------------------------
-    // MOSTRAR TERRITORIO SELECCIONADO
-    // --------------------------------------------------
-
-    private showSelectedTerritory() {
-
-        if (
-            this.selectedTerritoryId === null
-        ) {
-            this.clearTerritorySelection()
-            return
-        }
-
-        const territory =
-            this.territoryManager.getById(
-                this.selectedTerritoryId
-            )
-
-        if (territory === null) {
-
-            this.clearTerritorySelection()
-            return
-        }
-
-        this.ui.territoryIdValue.textContent =
-            territory.id.toString()
-
-        this.ui.territoryNameInput.value =
-            territory.name
-
-        this.ui.territoryPanel.classList.remove(
-            'hidden'
-        )
-
-        this.politicsController
-            .refreshTerritoryCountrySelect(
-                territory.id
-            )
-    }
-
-
-    // --------------------------------------------------
-    // LIMPIAR SELECCIÓN
-    // --------------------------------------------------
-
-    private clearTerritorySelection() {
-
-        this.selectedTerritoryId =
-            null
-
-        this.ui.territoryPanel.classList.add(
-            'hidden'
-        )
-
-        this.ui.territoryIdValue.textContent =
-            '-'
-
-        this.ui.territoryNameInput.value =
-            ''
-        
-        this.politicsController
-            .refreshTerritoryCountrySelect(
-                null
-            )
-    }
-
-    // --------------------------------------------------
-    // GUARDAR NOMBRE
-    // --------------------------------------------------
-
-    private saveTerritoryName() {
-
-        if (
-            this.selectedTerritoryId === null
-        ) {
-            return
-        }
-
-        const territory =
-            this.territoryManager.getById(
-                this.selectedTerritoryId
-            )
-
-        if (territory === null) {
-
-            this.clearTerritorySelection()
-            return
-        }
-
-        const newName =
-            this.ui.territoryNameInput.value.trim()
-
-        if (newName.length === 0) {
-
-            this.ui.statusMessage.textContent =
-                'El territorio debe tener un nombre'
-
-            this.ui.territoryNameInput.value =
-                territory.name
-
-            return
-        }
-
-        /*
-        * No agregamos una acción al historial
-        * si el nombre realmente no cambió.
-        */
-        if (
-            newName === territory.name
-        ) {
-            return
-        }
-
-        const renamed =
-            this.territoryManager.rename(
-                territory.id,
-                newName
-            )
-
-        if (renamed === null) {
-            return
-        }
-
-        this.commitHistory({
-            type: 'rename-territory',
-            territoryId: territory.id,
-            name: newName,
-        })
-
-        this.ui.statusMessage.textContent =
-            `Territorio #${territory.id} renombrado a "${newName}"`
-
-        this.showSelectedTerritory()
-    }
-
-    // --------------------------------------------------
-    private handleTerritorySaveClick =
-        () => {
-
-            this.saveTerritoryName()
-        }
-
-
-    private handleTerritoryCloseClick =
-        () => {
-
-            this.clearTerritorySelection()
-        }
-
-
-    private handleTerritoryNameKeyDown =
-        (event: KeyboardEvent) => {
-
-            if (
-                event.key === 'Enter'
-            ) {
-
-                event.preventDefault()
-
-                this.saveTerritoryName()
-            }
-        }
-
-    
-    // --------------------------------------------------
-    // ELIMINAR TERRITORIO
-    // --------------------------------------------------
-    private handleDeleteTerritoryClick =
-        () => {
-
-            if (
-                this.geographyLocked
-            ) {
-
-                this.ui.statusMessage.textContent =
-                    'Reabrí la geografía para eliminar territorios'
-
-                return
-            }
-
-            if (
-                this.selectedTerritoryId ===
-                null
-            ) {
-                return
-            }
-
-            const territory =
-                this.territoryManager.getById(
-                    this.selectedTerritoryId
-                )
-
-            if (territory === null) {
-                return
-            }
-
-            const shouldDelete =
-                window.confirm(
-                    `¿Eliminar el territorio "${territory.name}"?`
-                )
-
-            if (!shouldDelete) {
-                return
-            }
-
-            const territoryId =
-                territory.id
-
-            const deletedTerritory =
-                this.territoryManager.delete(
-                    territoryId
-                )
-
-            if (
-                deletedTerritory === null
-            ) {
-                return
-            }
-
-            /*
-            * El territorio deja de poder
-            * pertenecer a un país.
-            */
-            this.territoryControlManager.assign(
-                territoryId,
-                null
-            )
-
-            /*
-            * Registrar en Undo / Redo.
-            *
-            * Usamos commitHistory y no
-            * historyManager.push para que
-            * también se actualice:
-            *
-            * ● Sin guardar
-            */
-            this.commitHistory({
-                type:
-                    'delete-territory',
-
-                territoryId,
-            })
-
-
-            this.clearTerritoryPreview()
-
-            this.clearTerritorySelection()
-
-            this.ui.statusMessage.textContent =
-                `Territorio "${deletedTerritory.name}" eliminado`
         }
 
 
@@ -1986,622 +1137,6 @@ export class InputController {
                 event.preventDefault()
             }
         }
-
-
-    // --------------------------------------------------
-    // UNDO
-    // --------------------------------------------------
-
-    private async undo() {
-
-        if (
-            this.rebuildingHistory ||
-            this.drawing.isDrawing ||
-            this.camera.isPanning
-        ) {
-            return
-        }
-
-            const nextCommand =
-                this.historyManager.peekUndo()
-
-            if (nextCommand === null) {
-                return
-            }
-
-            if (
-                this.geographyLocked &&
-                this.isGeographyCommand(
-                    nextCommand
-                )
-            ) {
-
-                this.ui.statusMessage.textContent =
-                    'Reabrí la geografía para deshacer este cambio'
-
-                return
-            }
-
-        const command =
-            this.historyManager.undo()
-
-
-        if (command === null) {
-            return
-        }
-
-        this.rebuildingHistory = true
-
-        try {
-
-            await this.redrawHistory()
-
-            this.projectController.updateDirtyState()
-
-            this.showHistoryMessage(
-                command,
-                'undo'
-            )
-        }
-
-        finally {
-
-            this.rebuildingHistory =
-                false
-        }
-        
-    }
-
-
-    // --------------------------------------------------
-    // REDO
-    // --------------------------------------------------
-
-    private async redo() {
-
-        if (
-            this.rebuildingHistory ||
-            this.drawing.isDrawing ||
-            this.camera.isPanning
-        ) {
-            return
-        }
-
-        const nextCommand =
-            this.historyManager.peekRedo()
-
-        if (nextCommand === null) {
-            return
-        }
-
-        if (
-            this.geographyLocked &&
-            this.isGeographyCommand(
-                nextCommand
-            )
-        ) {
-
-            this.ui.statusMessage.textContent =
-                'Reabrí la geografía para rehacer este cambio'
-
-            return
-        }
-
-        const command =
-            this.historyManager.redo()
-
-        if (command === null) {
-            return
-        }
-
-        this.rebuildingHistory =
-            true
-
-        try {
-
-            await this.redrawHistory()
-
-            this.projectController.updateDirtyState()
-
-            this.showHistoryMessage(
-                command,
-                'redo'
-            )
-        }
-
-        finally {
-
-            this.rebuildingHistory =
-                false
-        }
-    }
-
-
-    // --------------------------------------------------
-    // MENSAJE DE UNDO / REDO
-    // --------------------------------------------------
-
-    private showHistoryMessage(
-        command: HistoryCommand,
-        action: 'undo' | 'redo'
-    ) {
-
-        const prefix =
-            action === 'undo'
-                ? 'Deshecho'
-                : 'Rehecho'
-
-        if (
-            command.type === 'rename-territory'
-        ) {
-
-            const territory =
-                this.territoryManager.getById(
-                    command.territoryId
-                )
-
-            if (territory !== null) {
-
-                this.ui.statusMessage.textContent =
-                    `${prefix}: Territorio #${territory.id} ahora se llama "${territory.name}"`
-            }
-
-            return
-        }
-
-        if (
-            command.type === 'create-territory'
-        ) {
-
-            this.ui.statusMessage.textContent =
-                action === 'undo'
-                    ? `Deshecho: creación del Territorio #${command.territoryId}`
-                    : `Rehecho: creación del Territorio #${command.territoryId}`
-
-            return
-        }
-
-        if (
-            command.type === 'split-territory'
-        ) {
-
-            this.ui.statusMessage.textContent =
-                action === 'undo'
-                    ? 'División de territorio deshecha'
-                    : 'División de territorio rehecha'
-
-            return
-        }
-
-        if (
-            command.type === 'delete-territory'
-        ) {
-
-            this.ui.statusMessage.textContent =
-                action === 'undo'
-                    ? `Deshecho: eliminación del Territorio #${command.territoryId}`
-                    : `Rehecho: eliminación del Territorio #${command.territoryId}`
-
-            return
-        }
-
-        if (
-            command.type ===
-            'assign-territory-country'
-        ) {
-
-            const currentCountryId =
-                this.territoryControlManager.getCountryId(
-                    command.territoryId
-                )
-
-
-            if (currentCountryId === null) {
-
-                this.ui.statusMessage.textContent =
-                    `${prefix}: Territorio #${command.territoryId} quedó sin país`
-
-                return
-            }
-
-
-            const country =
-                this.countryManager.getById(
-                    currentCountryId
-                )
-
-
-            if (country !== null) {
-
-                this.ui.statusMessage.textContent =
-                    `${prefix}: Territorio #${command.territoryId} pertenece a "${country.name}"`
-            }
-
-
-            return
-        }
-
-        if (
-            command.type === 'clear'
-        ) {
-
-            this.ui.statusMessage.textContent =
-                action === 'undo'
-                    ? 'Deshecho: limpiar mapa'
-                    : 'Rehecho: limpiar mapa'
-
-            return
-        }
-
-        if (
-            command.type === 'stroke'
-        ) {
-
-            this.ui.statusMessage.textContent =
-                action === 'undo'
-                    ? 'Deshecho: trazo'
-                    : 'Rehecho: trazo'
-        }
-
-        if (
-            command.type ===
-            'update-country'
-        ) {
-
-            const country =
-                this.countryManager.getById(
-                    command.countryId
-                )
-
-
-            if (country !== null) {
-
-                this.ui.statusMessage.textContent =
-                    `${prefix}: "${country.name}" actualizado`
-            }
-
-            return
-        }
-
-        if (
-            command.type ===
-            'delete-country'
-        ) {
-
-            const country =
-                this.countryManager.getById(
-                    command.countryId
-                )
-
-
-            if (
-                action === 'undo' &&
-                country !== null
-            ) {
-
-                this.ui.statusMessage.textContent =
-                    `Deshecho: volvió "${country.name}"`
-
-                return
-            }
-
-
-            this.ui.statusMessage.textContent =
-                'Rehecho: país eliminado'
-
-            return
-        }
-    }
-
-    // --------------------------------------------------
-    // RECONSTRUIR HISTORIAL
-    // --------------------------------------------------
-
-    private async redrawHistory() {
-
-        this.clearTerritoryPreview()
-
-        // --------------------------------
-        // RESTAURAR ESTADO BASE
-        // --------------------------------
-
-        const restoredBase =
-            await this.projectController
-                .restoreHistoryBase()
-
-        if (
-            !restoredBase
-        ) {
-
-            this.drawing.clear()
-            this.territoryManager.reset(
-                false
-            )
-
-            this.countryManager.reset()
-            this.territoryControlManager.reset()
-        }
-        else {
-            this.drawing.clear()
-            this.territoryManager.reset(false)
-            this.countryManager.reset()
-            this.territoryControlManager.reset()
-        }
-
-        // --------------------------------
-        // REPRODUCIR HISTORIAL
-        // --------------------------------
-
-        for (
-            const command of
-            this.historyManager.commands
-        ) {
-
-            // -----------------------------
-            // TRAZO
-            // -----------------------------
-
-            if (
-                command.type === 'stroke'
-            ) {
-
-                this.drawing.renderStroke(
-                    command
-                )
-
-                const result =
-                    this.reconcileTerritoriesAfterBorderChange()
-
-                /*
-                * Un stroke que llegó al historial ya
-                * fue validado cuando se creó.
-                *
-                * Si esto ocurre indicaría una
-                * inconsistencia interna.
-                */
-                if (
-                    result.status !==
-                    'reconciled'
-                ) {
-
-                    throw new Error(
-                        'El historial contiene una edición geográfica inválida'
-                    )
-                }
-            }
-
-            // -----------------------------
-            // LIMPIAR
-            // -----------------------------
-
-            else if (
-                command.type === 'clear'
-            ) {
-
-                this.drawing.clear()
-
-                this.territoryManager.reset(false)
-
-                this.territoryControlManager.reset()
-            }
-
-
-            // -----------------------------
-            // TERRITORIO
-            // -----------------------------
-
-            else if (
-                command.type ===
-                'create-territory'
-            ) {
-
-                this.territoryManager.recreate(
-                    command.territoryId,
-                    command.seedX,
-                    command.seedY,
-                    this.drawing.getPixels()
-                )
-            }
-
-            else if (
-                command.type ===
-                'delete-territory'
-            ) {
-                this.territoryManager.delete(
-                    command.territoryId
-                )
-
-                this.territoryControlManager.assign(
-                    command.territoryId,
-                    null
-                )
-            }
-
-            else if (
-                command.type ===
-                'split-territory'
-            ) {
-                /*
-                * Primero recreamos la frontera.
-                */
-                this.drawing.renderStroke(
-                    command.stroke
-                )
-
-                /*
-                * Después calculamos las dos regiones.
-                *
-                * Pasamos el ID guardado para que
-                * Undo/Redo no cree IDs distintos.
-                */
-                const result =
-                    this.territoryManager.split(
-                        command.territoryId,
-                        this.drawing.getPixels(),
-                        command.newTerritoryId
-                    )
-
-                if (
-                    result.status ===
-                    'split'
-                ) {
-
-                    /*
-                    * El territorio nuevo hereda
-                    * automáticamente el país que
-                    * tenía el original en este punto
-                    * del historial.
-                    */
-                    const countryId =
-                        this.territoryControlManager
-                            .getCountryId(
-                                command.territoryId
-                            )
-
-                    if (
-                        countryId !== null
-                    ) {
-
-                        this.territoryControlManager.assign(
-                            command.newTerritoryId,
-                            countryId
-                        )
-                    }
-                }
-            }
-
-            // -----------------------------
-            // RENOMBRAR TERRITORIO
-            // -----------------------------
-            else if (
-                command.type ===
-                'rename-territory'
-            ) {
-
-                this.territoryManager.rename(
-                    command.territoryId,
-                    command.name
-                )
-            }
-
-            // -----------------------------
-            // PAÍS
-            // -----------------------------
-            else if (
-                command.type ===
-                'create-country'
-            ) {
-
-                this.countryManager.recreate(
-                    command.countryId,
-                    command.name,
-                    command.color
-                )
-            }
-
-            // -----------------------------
-            // ASIGNAR PAÍS A TERRITORIO
-            // -----------------------------
-            else if (
-                command.type ===
-                'assign-territory-country'
-            ) {
-
-                this.territoryControlManager.assign(
-                    command.territoryId,
-                    command.countryId
-                )
-
-                this.politicsController.applyTerritoryCountryColor(
-                    command.territoryId,
-                    command.countryId
-                )
-            }
-
-            else if (
-                command.type ===
-                'update-country'
-            ) {
-
-                this.countryManager.update(
-                    command.countryId,
-                    command.name,
-                    command.color
-                )
-
-                this.politicsController.recolorCountryTerritories(
-                    command.countryId
-                )
-            }
-
-            else if (
-                command.type ===
-                'delete-country'
-            ) {
-
-                const territoryIds =
-                    this.territoryControlManager
-                        .getTerritoryIdsByCountryId(
-                            command.countryId
-                        )
-
-                for (
-                    const territoryId of territoryIds
-                ) {
-
-                    this.territoryControlManager.assign(
-                        territoryId,
-                        null
-                    )
-
-                    this.territoryManager.setNeutralColor(
-                        territoryId
-                    )
-                }
-
-                this.countryManager.delete(
-                    command.countryId
-                )
-            }
-        }
-
-        this.politicsController
-            .refreshUI()
-
-        this.refreshTerritorySelection()
-    }
-
-
-    // --------------------------------------------------
-    // REFRESCAR SELECCIÓN
-    // --------------------------------------------------
-
-    private refreshTerritorySelection() {
-
-        if (
-            this.selectedTerritoryId === null
-        ) {
-            return
-        }
-
-        const territory =
-            this.territoryManager.getById(
-                this.selectedTerritoryId
-            )
-
-        /*
-        * Puede desaparecer, por ejemplo,
-        * haciendo Undo sobre su creación.
-        */
-        if (territory === null) {
-
-            this.clearTerritorySelection()
-
-            return
-        }
-
-        this.showSelectedTerritory()
-    }
 
 
     // --------------------------------------------------
@@ -2642,13 +1177,13 @@ export class InputController {
                 * territorio seleccionado.
                 */
                 if (
-                    this.selectedTerritoryId !==
+                    this.geographyController.selectedTerritoryId !==
                     null
                 ) {
 
                     event.preventDefault()
 
-                    this.clearTerritorySelection()
+                    this.geographyController.clearTerritorySelection()
 
                     return
                 }
@@ -2676,7 +1211,7 @@ export class InputController {
 
                     event.preventDefault()
 
-                    this.undo()
+                    void this.historyController.undo()
 
                     return
                 }
@@ -2695,7 +1230,7 @@ export class InputController {
 
                     event.preventDefault()
 
-                    this.redo()
+                    void this.historyController.redo()
 
                     return
                 }
@@ -2743,7 +1278,7 @@ export class InputController {
     private handleWindowBlur =
         () => {
 
-            this.clearTerritoryPreview()
+            this.geographyController.clearTerritoryPreview()
             this.politicsController.clearAssignmentPreview()
             this.drawing.cancelStroke()
             this.camera.stopPan()
@@ -2756,313 +1291,6 @@ export class InputController {
                 'pan-ready'
             )
         }
-    
-    // --------------------------------------------------
-    // PROGRAMAR PREVIEW DE TERRITORIO
-    // --------------------------------------------------
-
-    private scheduleTerritoryPreview(
-        x: number,
-        y: number
-    ) {
-
-        /*
-        * Siempre guardamos la posición
-        * más reciente del mouse.
-        */
-        this.pendingPreviewPosition = {
-            x,
-            y,
-        }
-
-
-        /*
-        * Si ya hay un cálculo programado,
-        * dejamos que utilice la última
-        * posición disponible.
-        */
-        if (
-            this.previewTimer !== null
-        ) {
-            return
-        }
-
-
-        /*
-        * Máximo unas 20 actualizaciones
-        * por segundo.
-        */
-        this.previewTimer =
-            window.setTimeout(
-                () => {
-
-                    this.previewTimer =
-                        null
-
-
-                    const position =
-                        this.pendingPreviewPosition
-
-
-                    this.pendingPreviewPosition =
-                        null
-
-
-                    if (
-                        position === null ||
-                        this.currentTool !==
-                        'territory'
-                    ) {
-
-                        this.preview.clear()
-
-                        return
-                    }
-
-
-                    this.updateTerritoryPreview(
-                        position.x,
-                        position.y
-                    )
-                },
-                50
-            )
-    }
-
-
-    // --------------------------------------------------
-    // ACTUALIZAR PREVIEW
-    // --------------------------------------------------
-
-    private updateTerritoryPreview(
-        x: number,
-        y: number
-    ) {
-
-        const region =
-            this.territoryManager.findAvailableRegionAt(
-                x,
-                y,
-                this.drawing.getPixels()
-            )
-
-
-        if (region === null) {
-
-            this.preview.clear()
-
-            return
-        }
-
-
-        this.preview.showRegion(
-            region,
-            TERRITORY_CREATION_PREVIEW_COLOR,
-        )
-    }
-
-
-    // --------------------------------------------------
-    // LIMPIAR PREVIEW
-    // --------------------------------------------------
-
-    private clearTerritoryPreview() {
-
-        if (
-            this.previewTimer !== null
-        ) {
-
-            window.clearTimeout(
-                this.previewTimer
-            )
-
-            this.previewTimer =
-                null
-        }
-
-
-        this.pendingPreviewPosition =
-            null
-
-
-        this.preview.clear()
-    }
-
-
-    // --------------------------------------------------
-    // BLOQUEAR / DESBLOQUEAR GEOGRAFÍA
-    // --------------------------------------------------
-
-    private handleGeographyLockClick =
-        () => {
-
-            if (this.geographyLocked) {
-
-                this.unlockGeography()
-
-                return
-            }
-
-            this.lockGeography()
-        }
-
-    
-    // --------------------------------------------------
-    // FINALIZAR GEOGRAFÍA
-    // --------------------------------------------------
-
-    private lockGeography() {
-
-        this.geographyLocked =
-            true
-
-        this.timelineController.initializeIfNeeded()
-
-        this.clearTerritoryPreview()
-
-        /*
-        * Si estábamos usando una herramienta
-        * geográfica, pasamos a Seleccionar.
-        *
-        * assign-country puede continuar porque
-        * pertenece a la capa política.
-        */
-        if (
-            this.currentTool === 'pencil' ||
-            this.currentTool === 'eraser' ||
-            this.currentTool === 'territory' ||
-            this.currentTool === 'divide-territory'
-        ) {
-
-            this.setTool(
-                'select'
-            )
-        }
-
-        this.updateGeographyLockUI()
-
-        this.projectController.updateDirtyState()
-
-        this.ui.statusMessage.textContent =
-            'Geografía finalizada'
-    }
-
-
-    // --------------------------------------------------
-    // REABRIR GEOGRAFÍA
-    // --------------------------------------------------
-
-    private unlockGeography() {
-
-        this.geographyLocked =
-            false
-
-        if (
-            this.timelineController.isInitialized &&
-            this.currentTool ===
-                'assign-country'
-        ) {
-
-            this.setTool(
-                'select'
-            )
-        }
-
-        this.updateGeographyLockUI()
-
-        this.projectController.updateDirtyState()
-
-        this.ui.statusMessage.textContent =
-            'Geografía editable'
-    }
-
-
-    // --------------------------------------------------
-    // ACTUALIZAR BLOQUEO DE GEOGRAFÍA
-    // --------------------------------------------------
-
-    private updateGeographyLockUI() {
-
-        const locked =
-            this.geographyLocked
-
-        this.ui.pencilButton.disabled =
-            locked
-
-        this.ui.eraserButton.disabled =
-            locked
-
-        this.ui.territoryButton.disabled =
-            locked
-
-        this.ui.brushSizeInput.disabled =
-            locked
-
-        this.ui.clearButton.disabled =
-            locked
-
-        this.ui.territoryDeleteButton.disabled =
-            this.geographyLocked
-
-        this.ui.territoryDivideButton.disabled =
-            this.geographyLocked
-
-        this.ui.geographyLockButton.textContent =
-            locked
-                ? '✏ Editar geografía'
-                : '✓ Finalizar geografía'
-
-
-        this.ui.workspace.classList.toggle(
-            'geography-locked',
-            locked
-        )
-
-        this.timelineController.setVisible(locked)
-
-        const historicalPoliticsDisabled =
-            this.timelineController.isInitialized &&
-            !locked
-
-        this.ui.assignCountryButton.disabled =
-            historicalPoliticsDisabled
-
-        this.ui.territoryCountrySelect.disabled =
-            historicalPoliticsDisabled
-    }
-
-
-    // --------------------------------------------------
-    // COMPROBAR SI ES COMANDO GEOGRÁFICO
-    // --------------------------------------------------
-    private isGeographyCommand(
-        command: HistoryCommand
-    ): boolean {
-
-        return (
-            command.type === 'stroke' ||
-            command.type === 'create-territory' ||
-            command.type === 'clear' ||
-            command.type === 'delete-territory' ||
-            command.type === 'split-territory'
-        )
-    }
-
-
-    // --------------------------------------------------
-    // COMMIT HISTORY
-    // --------------------------------------------------
-
-    private commitHistory(
-        command: HistoryCommand
-    ) {
-
-        this.historyManager.push(
-            command
-        )
-
-        this.projectController.updateDirtyState()
-    }
 
 
     // --------------------------------------------------
@@ -3081,28 +1309,21 @@ export class InputController {
         */
         this.timelineController.reset()
 
+        this.geographyController.clearTerritoryPreview()
 
-        this.geographyLocked =
-            geographyLocked
-
-
-        this.clearTerritoryPreview()
-
-        this.clearTerritorySelection()
+        this.geographyController.clearTerritorySelection()
 
         this.setTool(
             'select'
         )
 
-        if (
-            geographyLocked
-        ) {
+        this.geographyController
+            .reset()
 
-            this.timelineController
-                .initializeIfNeeded()
-        }
-
-        this.updateGeographyLockUI()
+        this.geographyController
+            .setLockedState(
+                geographyLocked
+            )
 
         this.politicsController.resetSelection()
     }
@@ -3113,9 +1334,9 @@ export class InputController {
     // --------------------------------------------------
     private resetEditorForNewProject() {
 
-        this.clearTerritoryPreview()
+        this.geographyController.clearTerritoryPreview()
 
-        this.clearTerritorySelection()
+        this.geographyController.clearTerritorySelection()
 
         this.ui.countryPanel.classList.add(
             'hidden'
@@ -3129,16 +1350,13 @@ export class InputController {
 
         this.territoryControlManager.reset()
 
-        this.geographyLocked =
-            false
-
         this.timelineController.reset()
 
         this.setTool(
             'pencil'
         )
 
-        this.updateGeographyLockUI()
+        this.geographyController.reset()
 
         this.politicsController.resetSelection()
 
