@@ -2,704 +2,86 @@ import type {
     TimelineDate,
     TimelineEvent,
     TimelineTerritoryControl,
-    TerritoryLineage,
     TerritoryOwnerChangedEvent,
+    TerritorySplitEvent,
 } from './timelineTypes'
+
+
+type TimelinePosition = {
+    date: TimelineDate
+    eventId: number
+}
 
 
 export class TimelineManager {
 
-    private initialDate: TimelineDate = {
-        year: 0,
-        month: 1,
-    }
+    private initialDate:
+        TimelineDate = {
+            year: 0,
+            month: 1,
+        }
 
-    private currentDate: TimelineDate = {
-        year: 0,
-        month: 1,
-    }
+    private currentDate:
+        TimelineDate = {
+            year: 0,
+            month: 1,
+        }
 
     private initialTerritoryControl =
-        new Map<number, number | null>()
+        new Map<
+            number,
+            number | null
+        >()
 
     private events:
         TimelineEvent[] = []
 
-    private territoryLineages =
-        new Map<number, TerritoryLineage>()
-
-    private nextEventId = 1
+    private nextEventId =
+        1
 
 
     // --------------------------------------------------
-    // AÑO INICIAL
+    // FECHA
     // --------------------------------------------------
 
-    public get startYear(): number {
+    public get startYear():
+        number {
 
         return this.initialDate.year
     }
 
 
-    // --------------------------------------------------
-    // FECHA ACTUAL
-    // --------------------------------------------------
-    public get date(): TimelineDate {
-
-        return {
-            ...this.currentDate,
-        }
-    }
-
-    // --------------------------------------------------
-    // AÑO ACTUAL
-    // --------------------------------------------------
-
-    public get year(): number {
+    public get year():
+        number {
 
         return this.currentDate.year
     }
 
 
-    // --------------------------------------------------
-    // MES ACTUAL
-    // --------------------------------------------------
-
-    public get month(): number {
+    public get month():
+        number {
 
         return this.currentDate.month
     }
 
 
-    // --------------------------------------------------
-    // CAMBIAR AÑO ACTUAL
-    // --------------------------------------------------
-
-    public setYear(
-        year: number
-    ) {
-
-        if (
-            !Number.isInteger(
-                year
-            )
-        ) {
-
-            throw new Error(
-                'El año debe ser un número entero'
-            )
-        }
-
-        this.setDate({
-            year,
-            month:
-                this.currentDate.month,
-        })
-    }
-
-
-    // --------------------------------------------------
-    // SETEAR FECHA
-    // --------------------------------------------------
-    public setDate(
-        date: TimelineDate
-    ) {
-
-        this.validateDate(
-            date
-        )
-
-        this.currentDate = {
-            ...date,
-        }
-    }
-
-    // --------------------------------------------------
-    // ESTABLECER ESTADO POLÍTICO INICIAL
-    // --------------------------------------------------
-
-    public setInitialState(
-        date: TimelineDate,
-        territoryControl:
-            TimelineTerritoryControl[]
-    ) {
-
-        this.validateDate(
-            date
-        )
-
-        this.initialDate = {
-            ...date,
-        }
-
-        this.currentDate = {
-            ...date,
-        }
-
-        this.initialTerritoryControl.clear()
-
-        for (
-            const control of
-            territoryControl
-        ) {
-
-            if (
-                !Number.isInteger(
-                    control.territoryId
-                ) ||
-                control.territoryId <= 0
-            ) {
-
-                throw new Error(
-                    'ID de territorio inválido'
-                )
-            }
-
-            if (
-                control.countryId !== null &&
-                (
-                    !Number.isInteger(
-                        control.countryId
-                    ) ||
-                    control.countryId <= 0
-                )
-            ) {
-
-                throw new Error(
-                    'ID de país inválido'
-                )
-            }
-
-            this.initialTerritoryControl.set(
-                control.territoryId,
-                control.countryId
-            )
-        }
-
-        /*
-         * Un nuevo estado inicial representa
-         * una nueva historia.
-         */
-        this.events = []
-
-        this.territoryLineages.clear()
-
-        this.nextEventId = 1
-    }
-
-
-    // --------------------------------------------------
-    // AGREGAR CAMBIO DE PROPIETARIO
-    // --------------------------------------------------
-
-    public addTerritoryOwnerChangedEvent(
-        date: TimelineDate,
-        territoryId: number,
-        countryId: number | null
-    ): TerritoryOwnerChangedEvent {
-
-        this.validateDate(
-            date
-        )
-
-        if (
-            !Number.isInteger(
-                territoryId
-            ) ||
-            territoryId <= 0
-        ) {
-
-            throw new Error(
-                'ID de territorio inválido'
-            )
-        }
-
-        if (
-            countryId !== null &&
-            (
-                !Number.isInteger(
-                    countryId
-                ) ||
-                countryId <= 0
-            )
-        ) {
-
-            throw new Error(
-                'ID de país inválido'
-            )
-        }
-
-        const event:
-            TerritoryOwnerChangedEvent = {
-
-            id:
-                this.nextEventId++,
-
-            type:
-                'territory-owner-changed',
-
-            date: {
-                ...date,
-            },
-
-            territoryId,
-
-            countryId,
-        }
-
-        this.events.push(
-            event
-        )
+    public get date():
+        TimelineDate {
 
         return {
-            ...event,
+            year:
+                this.currentDate.year,
 
-            date: {
-                ...event.date,
-            },
+            month:
+                this.currentDate.month,
         }
-    }
-
-
-    // --------------------------------------------------
-    // ELIMINAR EVENTO
-    // --------------------------------------------------
-
-    public deleteEvent(
-        eventId: number
-    ): boolean {
-
-        const index =
-            this.events.findIndex(
-                event =>
-                    event.id ===
-                    eventId
-            )
-
-        if (
-            index === -1
-        ) {
-            return false
-        }
-
-        this.events.splice(
-            index,
-            1
-        )
-
-        return true
-    }
-
-
-    // --------------------------------------------------
-    // ESTADO POLÍTICO EN UN AÑO
-    // --------------------------------------------------
-
-    public getStateAt(
-        date: TimelineDate
-    ): Map<number, number | null> {
-
-        this.validateDate(
-            date
-        )
-
-        const territoryIds =
-            new Set<number>()
-
-        /*
-        * Territorios que existían en
-        * el estado inicial.
-        */
-        for (
-            const territoryId of
-            this.initialTerritoryControl.keys()
-        ) {
-
-            territoryIds.add(
-                territoryId
-            )
-        }
-
-        /*
-        * Territorios mencionados por eventos.
-        */
-        for (
-            const event of
-            this.events
-        ) {
-
-            territoryIds.add(
-                event.territoryId
-            )
-        }
-
-        /*
-        * Territorios creados mediante
-        * divisiones y sus padres.
-        */
-        for (
-            const lineage of
-            this.territoryLineages.values()
-        ) {
-
-            territoryIds.add(
-                lineage.territoryId
-            )
-
-            territoryIds.add(
-                lineage.parentTerritoryId
-            )
-        }
-
-        const state =
-            new Map<number, number | null>()
-
-        for (
-            const territoryId of
-            territoryIds
-        ) {
-
-            const countryId =
-                this.resolveTerritoryOwnerAt(
-                    territoryId,
-                    date,
-                    new Set<number>()
-                )
-
-            state.set(
-                territoryId,
-                countryId
-            )
-        }
-
-        return state
-    }
-
-
-    // --------------------------------------------------
-    // PROPIETARIO DE TERRITORIO EN UN AÑO
-    // --------------------------------------------------
-
-    public getTerritoryOwnerAt(
-        territoryId: number,
-        date: TimelineDate
-    ): number | null {
-
-        this.validateDate(
-            date
-        )
-
-        return this.resolveTerritoryOwnerAt(
-            territoryId,
-            date,
-            new Set<number>()
-        )
-    }
-
-
-    // --------------------------------------------------
-    // RESOLVER PROPIETARIO DE TERRITORIO
-    // --------------------------------------------------
-    private resolveTerritoryOwnerAt(
-        territoryId: number,
-        date: TimelineDate,
-        visitedTerritoryIds: Set<number>
-    ): number | null {
-
-        if (
-            visitedTerritoryIds.has(
-                territoryId
-            )
-        ) {
-
-            throw new Error(
-                'Se detectó un ciclo en el linaje territorial'
-            )
-        }
-
-        const visited =
-            new Set(
-                visitedTerritoryIds
-            )
-
-        visited.add(
-            territoryId
-        )
-
-        const lineage =
-            this.territoryLineages.get(
-                territoryId
-            )
-
-        // --------------------------------
-        // TERRITORIO CON PADRE
-        // --------------------------------
-
-        if (
-            lineage !== undefined
-        ) {
-
-            const comparedWithSplit =
-                this.compareDates(
-                    date,
-                    lineage.splitDate
-                )
-
-            /*
-            * Antes de la división, la región
-            * que hoy conocemos como este
-            * territorio sigue exactamente
-            * la historia de su padre.
-            */
-            if (
-                comparedWithSplit < 0
-            ) {
-
-                return this.resolveTerritoryOwnerAt(
-                    lineage.parentTerritoryId,
-                    date,
-                    visited
-                )
-            }
-
-            /*
-            * Desde la fecha de división
-            * buscamos eventos propios del hijo.
-            *
-            * Un evento en la misma fecha
-            * de la división también es válido.
-            */
-            const ownEvent =
-                this.findLatestTerritoryOwnerEvent(
-                    territoryId,
-                    date,
-                    lineage.splitDate
-                )
-
-            if (
-                ownEvent !== null
-            ) {
-
-                return ownEvent.countryId
-            }
-
-            /*
-            * Si todavía no tuvo ningún evento
-            * propio, conserva el propietario
-            * que tenía el padre exactamente
-            * al dividirse.
-            */
-            return this.resolveTerritoryOwnerAt(
-                lineage.parentTerritoryId,
-                lineage.splitDate,
-                visited
-            )
-        }
-
-        // --------------------------------
-        // TERRITORIO SIN PADRE
-        // --------------------------------
-
-        const latestEvent =
-            this.findLatestTerritoryOwnerEvent(
-                territoryId,
-                date,
-                null
-            )
-
-        if (
-            latestEvent !== null
-        ) {
-
-            return latestEvent.countryId
-        }
-
-        return (
-            this.initialTerritoryControl.get(
-                territoryId
-            )
-            ?? null
-        )
-    }
-
-
-    // --------------------------------------------------
-    // BUSCAR ÚLTIMO EVENTO DE PROPIETARIO DE TERRITORIO
-    // --------------------------------------------------
-    private findLatestTerritoryOwnerEvent(
-        territoryId: number,
-        upToDate: TimelineDate,
-        fromDate: TimelineDate | null
-    ): TerritoryOwnerChangedEvent | null {
-
-        let latest:
-            TerritoryOwnerChangedEvent | null =
-            null
-
-        for (
-            const event of
-            this.events
-        ) {
-
-            if (
-                event.type !==
-                'territory-owner-changed'
-            ) {
-                continue
-            }
-
-            if (
-                event.territoryId !==
-                territoryId
-            ) {
-                continue
-            }
-
-            /*
-            * Evento posterior a la fecha
-            * que estamos consultando.
-            */
-            if (
-                this.compareDates(
-                    event.date,
-                    upToDate
-                ) > 0
-            ) {
-                continue
-            }
-
-            /*
-            * En un territorio hijo ignoramos
-            * cualquier evento anterior a su
-            * fecha de nacimiento.
-            */
-            if (
-                fromDate !== null &&
-                this.compareDates(
-                    event.date,
-                    fromDate
-                ) < 0
-            ) {
-                continue
-            }
-
-            if (
-                latest === null
-            ) {
-
-                latest =
-                    event
-
-                continue
-            }
-
-            const dateDifference =
-                this.compareDates(
-                    event.date,
-                    latest.date
-                )
-
-            if (
-                dateDifference > 0 ||
-                (
-                    dateDifference === 0 &&
-                    event.id >
-                    latest.id
-                )
-            ) {
-
-                latest =
-                    event
-            }
-        }
-
-        return latest
-    }
-
-    // --------------------------------------------------
-    // EVENTOS
-    // --------------------------------------------------
-
-    public getEvents():
-        TimelineEvent[] {
-
-        return this.events.map(
-            event => ({
-                ...event,
-
-                date: {
-                    ...event.date,
-                },
-            })
-        )
-    }
-
-
-    // --------------------------------------------------
-    // EVENTOS DE UN AÑO
-    // --------------------------------------------------
-
-    public getEventsAt(
-        date: TimelineDate
-    ): TimelineEvent[] {
-
-        return this.events
-            .filter(
-                event =>
-                    this.compareDates(
-                        event.date,
-                        date
-                    ) === 0
-            )
-            .sort(
-                (
-                    a,
-                    b
-                ) =>
-                    a.id -
-                    b.id
-            )
-            .map(
-                event => ({
-                    ...event,
-
-                    date: {
-                        ...event.date,
-                    },
-                })
-            )
-    }
-
-
-    // --------------------------------------------------
-    // RESET
-    // --------------------------------------------------
-
-    public reset() {
-
-        this.initialDate = {
-            year: 0,
-            month: 1,
-        }
-
-        this.currentDate = {
-            year: 0,
-            month: 1,
-        }
-
-        this.initialTerritoryControl.clear()
-
-        this.events = []
-
-        this.territoryLineages.clear()
-
-        this.nextEventId = 1
     }
 
 
     // --------------------------------------------------
     // VALIDACIÓN DE FECHA
     // --------------------------------------------------
+
     private validateDate(
         date: TimelineDate
     ) {
@@ -711,9 +93,10 @@ export class TimelineManager {
         ) {
 
             throw new Error(
-                'El año debe ser un número entero'
+                'El año del timeline debe ser entero'
             )
         }
+
 
         if (
             !Number.isInteger(
@@ -724,15 +107,16 @@ export class TimelineManager {
         ) {
 
             throw new Error(
-                'El mes debe estar entre 1 y 12'
+                'El mes del timeline debe estar entre 1 y 12'
             )
         }
     }
 
 
     // --------------------------------------------------
-    // COMPARACIÓN DE FECHAS
+    // COMPARAR FECHAS
     // --------------------------------------------------
+
     private compareDates(
         a: TimelineDate,
         b: TimelineDate
@@ -757,171 +141,1097 @@ export class TimelineManager {
 
 
     // --------------------------------------------------
-    // REGISTRAR LINAGE DE TERRITORIO
+    // COMPARAR POSICIONES
     // --------------------------------------------------
-    public registerTerritorySplit(
-        territoryId: number,
-        parentTerritoryId: number,
-        splitDate: TimelineDate
-    ) {
+
+    private comparePositions(
+        a: TimelinePosition,
+        b: TimelinePosition
+    ): number {
+
+        const dateCompare =
+            this.compareDates(
+                a.date,
+                b.date
+            )
 
         if (
-            !Number.isInteger(
-                territoryId
-            ) ||
+            dateCompare !== 0
+        ) {
+            return dateCompare
+        }
+
+        return (
+            a.eventId -
+            b.eventId
+        )
+    }
+
+
+    private getEventPosition(
+        event: TimelineEvent
+    ): TimelinePosition {
+
+        return {
+            date:
+                event.date,
+
+            eventId:
+                event.id,
+        }
+    }
+
+
+    // --------------------------------------------------
+    // FECHA ACTUAL
+    // --------------------------------------------------
+
+    public setDate(
+        date: TimelineDate
+    ) {
+
+        this.validateDate(
+            date
+        )
+
+        this.currentDate = {
+            year:
+                date.year,
+
+            month:
+                date.month,
+        }
+    }
+
+    public setYear(
+        year: number
+    ) {
+
+        this.setDate({
+            year,
+
+            month:
+                this.currentDate.month,
+        })
+    }
+
+
+    // --------------------------------------------------
+    // ESTADO INICIAL
+    // --------------------------------------------------
+
+    public setInitialState(
+        date: TimelineDate,
+        territoryControl:
+            TimelineTerritoryControl[]
+    ) {
+
+        this.validateDate(
+            date
+        )
+
+        this.initialDate = {
+            year:
+                date.year,
+
+            month:
+                date.month,
+        }
+
+        this.currentDate = {
+            year:
+                date.year,
+
+            month:
+                date.month,
+        }
+
+        this.initialTerritoryControl
+            .clear()
+
+
+        for (
+            const item of
+            territoryControl
+        ) {
+
+            this.initialTerritoryControl
+                .set(
+                    item.territoryId,
+                    item.countryId
+                )
+        }
+
+        this.events = []
+
+        this.nextEventId =
+            1
+    }
+
+
+    // --------------------------------------------------
+    // EVENTO: CAMBIO DE PROPIETARIO
+    // --------------------------------------------------
+
+    public addTerritoryOwnerChangedEvent(
+        date: TimelineDate,
+        territoryId: number,
+        countryId: number | null
+    ): TerritoryOwnerChangedEvent {
+
+        this.validateDate(
+            date
+        )
+
+        if (
             territoryId <= 0
         ) {
 
             throw new Error(
-                'ID de territorio hijo inválido'
+                'El territorio del evento debe ser válido'
             )
         }
 
-        if (
-            !Number.isInteger(
-                parentTerritoryId
-            ) ||
-            parentTerritoryId <= 0
-        ) {
+        const event:
+            TerritoryOwnerChangedEvent = {
 
-            throw new Error(
-                'ID de territorio padre inválido'
-            )
+            id:
+                this.nextEventId++,
+
+            type:
+                'territory-owner-changed',
+
+            date: {
+                year:
+                    date.year,
+
+                month:
+                    date.month,
+            },
+
+            territoryId,
+
+            countryId,
         }
 
-        if (
-            territoryId ===
-            parentTerritoryId
-        ) {
-
-            throw new Error(
-                'Un territorio no puede ser su propio padre'
-            )
-        }
-
-        this.validateDate(
-            splitDate
+        this.events.push(
+            event
         )
 
-        /*
-        * Si ya existe exactamente este linaje,
-        * no hacemos nada.
-        *
-        * Esto nos ayuda a que la operación sea
-        * idempotente.
-        */
-        const existing =
-            this.territoryLineages.get(
-                territoryId
-            )
+        return {
+            ...event,
+
+            date: {
+                ...event.date,
+            },
+        }
+    }
+
+
+    // --------------------------------------------------
+    // EVENTO: DIVISIÓN DE TERRITORIO
+    // --------------------------------------------------
+
+    public addTerritorySplitEvent(
+        date: TimelineDate,
+        parentTerritoryId: number,
+        newTerritoryId: number
+    ): TerritorySplitEvent {
+
+        this.validateDate(
+            date
+        )
+
 
         if (
-            existing !== undefined
+            parentTerritoryId <= 0 ||
+            newTerritoryId <= 0
         ) {
 
-            const sameParent =
-                existing.parentTerritoryId ===
-                parentTerritoryId
+            throw new Error(
+                'Los territorios de la división deben ser válidos'
+            )
+        }
 
-            const sameDate =
-                this.compareDates(
-                    existing.splitDate,
-                    splitDate
-                ) === 0
-
-            if (
-                sameParent &&
-                sameDate
-            ) {
-                return
-            }
+        if (
+            parentTerritoryId ===
+            newTerritoryId
+        ) {
 
             throw new Error(
-                `El territorio ${territoryId} ya tiene otro linaje`
+                'Un territorio no puede dividirse desde sí mismo'
             )
         }
 
         /*
-        * Protección contra ciclos:
-        *
-        * T1 → T2 → T3 → T1
-        */
-        let ancestorId =
+         * Un territorio nuevo solo puede
+         * tener un origen histórico.
+         */
+        if (
+            this.getSplitEventForChild(
+                newTerritoryId
+            ) !== null
+        ) {
+
+            throw new Error(
+                `El territorio ${newTerritoryId} ya tiene un evento de división`
+            )
+        }
+
+        /*
+         * Prevenir ciclos:
+         *
+         * T1 -> T2
+         * T2 -> T3
+         * T3 -> T1   ❌
+         */
+        let currentTerritoryId =
             parentTerritoryId
 
-        while (true) {
+
+        const visited =
+            new Set<number>()
+
+
+        while (
+            currentTerritoryId > 0
+        ) {
 
             if (
-                ancestorId ===
-                territoryId
+                currentTerritoryId ===
+                newTerritoryId
             ) {
 
                 throw new Error(
-                    'El linaje territorial generaría un ciclo'
+                    'La división generaría un ciclo de territorios'
                 )
             }
 
-            const ancestor =
-                this.territoryLineages.get(
-                    ancestorId
+            if (
+                visited.has(
+                    currentTerritoryId
+                )
+            ) {
+
+                throw new Error(
+                    'Se detectó un ciclo en el linaje territorial'
+                )
+            }
+
+            visited.add(
+                currentTerritoryId
+            )
+
+            const parentSplit =
+                this.getSplitEventForChild(
+                    currentTerritoryId
                 )
 
             if (
-                ancestor === undefined
+                parentSplit === null
             ) {
                 break
             }
 
-            ancestorId =
-                ancestor.parentTerritoryId
+            currentTerritoryId =
+                parentSplit.parentTerritoryId
         }
 
-        this.territoryLineages.set(
-            territoryId,
-            {
-                territoryId,
+        const event:
+            TerritorySplitEvent = {
 
-                parentTerritoryId,
+            id:
+                this.nextEventId++,
 
-                splitDate: {
-                    ...splitDate,
-                },
+            type:
+                'territory-split',
+
+            date: {
+                year:
+                    date.year,
+
+                month:
+                    date.month,
+            },
+
+            parentTerritoryId,
+
+            newTerritoryId,
+        }
+
+        this.events.push(
+            event
+        )
+
+        return {
+            ...event,
+
+            date: {
+                ...event.date,
+            },
+        }
+    }
+
+
+    // --------------------------------------------------
+    // BUSCAR DIVISIÓN DE UN TERRITORIO
+    // --------------------------------------------------
+
+    private getSplitEventForChild(
+        territoryId: number
+    ): TerritorySplitEvent | null {
+
+        for (
+            const event of
+            this.events
+        ) {
+
+            if (
+                event.type ===
+                    'territory-split' &&
+                event.newTerritoryId ===
+                    territoryId
+            ) {
+
+                return event
             }
+        }
+
+        return null
+    }
+
+
+    // --------------------------------------------------
+    // ÚLTIMO CAMBIO DE PROPIETARIO
+    // --------------------------------------------------
+
+    private findLatestOwnerEvent(
+        territoryId: number,
+        position: TimelinePosition,
+        afterPosition:
+            TimelinePosition | null
+    ): TerritoryOwnerChangedEvent | null {
+
+        let latest:
+            TerritoryOwnerChangedEvent | null =
+            null
+
+
+        for (
+            const event of
+            this.events
+        ) {
+
+            if (
+                event.type !==
+                'territory-owner-changed'
+            ) {
+                continue
+            }
+
+            if (
+                event.territoryId !==
+                territoryId
+            ) {
+                continue
+            }
+
+            const eventPosition =
+                this.getEventPosition(
+                    event
+                )
+
+            /*
+             * El evento ocurre después
+             * del instante solicitado.
+             */
+            if (
+                this.comparePositions(
+                    eventPosition,
+                    position
+                ) > 0
+            ) {
+                continue
+            }
+
+            /*
+             * Para territorios hijos,
+             * ignoramos eventos anteriores
+             * o iguales a su división.
+             */
+            if (
+                afterPosition !== null &&
+                this.comparePositions(
+                    eventPosition,
+                    afterPosition
+                ) <= 0
+            ) {
+                continue
+            }
+
+            if (
+                latest === null
+            ) {
+
+                latest =
+                    event
+
+                continue
+            }
+
+            if (
+                this.comparePositions(
+                    eventPosition,
+                    this.getEventPosition(
+                        latest
+                    )
+                ) > 0
+            ) {
+
+                latest =
+                    event
+            }
+        }
+
+        return latest
+    }
+
+
+    // --------------------------------------------------
+    // RESOLVER PROPIETARIO
+    // --------------------------------------------------
+
+    private resolveTerritoryOwnerAtPosition(
+        territoryId: number,
+        position: TimelinePosition,
+        resolving:
+            Set<number>
+    ): number | null {
+
+        if (
+            resolving.has(
+                territoryId
+            )
+        ) {
+
+            throw new Error(
+                'Se detectó un ciclo resolviendo el timeline'
+            )
+        }
+
+        resolving.add(
+            territoryId
+        )
+
+        const splitEvent =
+            this.getSplitEventForChild(
+                territoryId
+            )
+
+        // --------------------------------
+        // TERRITORIO CON PADRE
+        // --------------------------------
+
+        if (
+            splitEvent !== null
+        ) {
+
+            const splitPosition =
+                this.getEventPosition(
+                    splitEvent
+                )
+
+            /*
+             * Antes de la división, como por
+             * ahora la geometría es estática,
+             * el territorio hijo visualmente
+             * existe y sigue al padre.
+             */
+            if (
+                this.comparePositions(
+                    position,
+                    splitPosition
+                ) < 0
+            ) {
+
+                const owner =
+                    this.resolveTerritoryOwnerAtPosition(
+                        splitEvent.parentTerritoryId,
+                        position,
+                        resolving
+                    )
+
+                resolving.delete(
+                    territoryId
+                )
+
+                return owner
+            }
+
+            /*
+             * En el instante de división,
+             * hereda exactamente el estado
+             * que tenía el padre justo antes
+             * del evento.
+             *
+             * Los IDs determinan el orden de
+             * eventos dentro de la misma fecha.
+             */
+            const beforeSplit:
+                TimelinePosition = {
+
+                date:
+                    splitEvent.date,
+
+                eventId:
+                    splitEvent.id - 1,
+            }
+
+            const inheritedOwner =
+                this.resolveTerritoryOwnerAtPosition(
+                    splitEvent.parentTerritoryId,
+                    beforeSplit,
+                    resolving
+                )
+
+            /*
+             * Después de dividirse, solamente
+             * sus propios eventos posteriores
+             * pueden modificarlo.
+             */
+            const ownEvent =
+                this.findLatestOwnerEvent(
+                    territoryId,
+                    position,
+                    splitPosition
+                )
+
+            resolving.delete(
+                territoryId
+            )
+
+            if (
+                ownEvent !== null
+            ) {
+                return ownEvent.countryId
+            }
+
+            return inheritedOwner
+        }
+
+        // --------------------------------
+        // TERRITORIO RAÍZ
+        // --------------------------------
+
+        const ownEvent =
+            this.findLatestOwnerEvent(
+                territoryId,
+                position,
+                null
+            )
+
+        resolving.delete(
+            territoryId
+        )
+
+        if (
+            ownEvent !== null
+        ) {
+            return ownEvent.countryId
+        }
+
+        return (
+            this.initialTerritoryControl
+                .get(
+                    territoryId
+                )
+            ?? null
         )
     }
 
 
     // --------------------------------------------------
-    // OBTENER LINAGE DE TERRITORIOS
+    // PROPIETARIO EN FECHA
     // --------------------------------------------------
-    public getTerritoryLineages():
-        TerritoryLineage[] {
 
-        return Array
-            .from(
-                this.territoryLineages.values()
+    public getTerritoryOwnerAt(
+        territoryId: number,
+        date: TimelineDate
+    ): number | null {
+
+        this.validateDate(
+            date
+        )
+
+        /*
+         * Infinity significa:
+         *
+         * aplicar TODOS los eventos
+         * de esa fecha.
+         */
+        return this.resolveTerritoryOwnerAtPosition(
+            territoryId,
+            {
+                date,
+
+                eventId:
+                    Number.POSITIVE_INFINITY,
+            },
+            new Set<number>()
+        )
+    }
+
+
+    // --------------------------------------------------
+    // ESTADO COMPLETO EN FECHA
+    // --------------------------------------------------
+
+    public getStateAt(
+        date: TimelineDate
+    ): Map<number, number | null> {
+
+        this.validateDate(
+            date
+        )
+
+        const territoryIds =
+            new Set<number>()
+
+        for (
+            const territoryId of
+            this.initialTerritoryControl.keys()
+        ) {
+
+            territoryIds.add(
+                territoryId
+            )
+        }
+
+        /*
+         * También incluimos territorios
+         * mencionados por eventos.
+         */
+        for (
+            const event of
+            this.events
+        ) {
+
+            if (
+                event.type ===
+                'territory-owner-changed'
+            ) {
+
+                territoryIds.add(
+                    event.territoryId
+                )
+
+                continue
+            }
+
+            territoryIds.add(
+                event.parentTerritoryId
+            )
+
+            territoryIds.add(
+                event.newTerritoryId
+            )
+        }
+
+        const state =
+            new Map<
+                number,
+                number | null
+            >()
+
+        for (
+            const territoryId of
+            territoryIds
+        ) {
+
+            state.set(
+                territoryId,
+                this.getTerritoryOwnerAt(
+                    territoryId,
+                    date
+                )
+            )
+        }
+
+
+        return state
+    }
+
+
+    // --------------------------------------------------
+    // ELIMINAR EVENTO
+    // --------------------------------------------------
+
+    public deleteEvent(
+        eventId: number
+    ): boolean {
+
+        const index =
+            this.events.findIndex(
+                event =>
+                    event.id ===
+                    eventId
+            )
+
+        if (
+            index < 0
+        ) {
+            return false
+        }
+
+        this.events.splice(
+            index,
+            1
+        )
+
+        return true
+    }
+
+
+    // --------------------------------------------------
+    // EVENTOS
+    // --------------------------------------------------
+
+    public getEvents():
+        TimelineEvent[] {
+
+        return this.events
+            .slice()
+            .sort(
+                (
+                    a,
+                    b
+                ) => {
+
+                    const dateCompare =
+                        this.compareDates(
+                            a.date,
+                            b.date
+                        )
+
+                    if (
+                        dateCompare !== 0
+                    ) {
+                        return dateCompare
+                    }
+
+                    return (
+                        a.id -
+                        b.id
+                    )
+                }
             )
             .map(
-                lineage => ({
-                    ...lineage,
+                event => ({
+                    ...event,
 
-                    splitDate: {
-                        ...lineage.splitDate,
+                    date: {
+                        ...event.date,
                     },
                 })
             )
     }
 
+    public getEventsAt(
+        date: TimelineDate
+    ): TimelineEvent[] {
 
-    // --------------------------------------------------
-    // ELIMINAR LINAGE DE TERRITORIO
-    // --------------------------------------------------
-    public removeTerritoryLineage(
-        territoryId: number
-    ): boolean {
-
-        return this.territoryLineages.delete(
-            territoryId
+        this.validateDate(
+            date
         )
+
+        return this.getEvents()
+            .filter(
+                event =>
+                    this.compareDates(
+                        event.date,
+                        date
+                    ) === 0
+            )
+    }
+
+
+    // --------------------------------------------------
+    // RESET
+    // --------------------------------------------------
+
+    public reset() {
+
+        this.initialDate = {
+            year: 0,
+            month: 1,
+        }
+
+        this.currentDate = {
+            year: 0,
+            month: 1,
+        }
+
+        this.initialTerritoryControl
+            .clear()
+
+        this.events = []
+
+        this.nextEventId =
+            1
+    }
+
+
+    // --------------------------------------------------
+    // RESTAURAR EVENTOS DE DIVISIÓN
+    // --------------------------------------------------
+
+    public restoreTerritorySplitEvents(
+        events: TerritorySplitEvent[]
+    ) {
+
+        if (
+            events.length === 0
+        ) {
+            return
+        }
+
+        /*
+        * IDs de todos los eventos que
+        * actualmente existen.
+        */
+        const existingEventIds =
+            new Set(
+                this.events.map(
+                    event =>
+                        event.id
+                )
+            )
+
+        /*
+        * Construimos el conjunto completo
+        * de divisiones:
+        *
+        * existentes + restauradas.
+        *
+        * Lo usamos para validar que no haya
+        * hijos duplicados ni ciclos.
+        */
+        const candidateSplits:
+            TerritorySplitEvent[] =
+            this.events
+                .filter(
+                    (
+                        event
+                    ): event is TerritorySplitEvent =>
+                        event.type ===
+                        'territory-split'
+                )
+                .map(
+                    event => ({
+                        ...event,
+
+                        date: {
+                            ...event.date,
+                        },
+                    })
+                )
+
+        for (
+            const event of
+            events
+        ) {
+
+            this.validateDate(
+                event.date
+            )
+
+            if (
+                event.parentTerritoryId <= 0 ||
+                event.newTerritoryId <= 0
+            ) {
+
+                throw new Error(
+                    'Los territorios de una división restaurada deben ser válidos'
+                )
+            }
+
+            if (
+                event.parentTerritoryId ===
+                event.newTerritoryId
+            ) {
+
+                throw new Error(
+                    'Un territorio no puede ser su propio padre'
+                )
+            }
+
+            if (
+                existingEventIds.has(
+                    event.id
+                )
+            ) {
+
+                throw new Error(
+                    `Ya existe un evento con ID ${event.id}`
+                )
+            }
+
+            existingEventIds.add(
+                event.id
+            )
+
+            candidateSplits.push({
+                ...event,
+
+                date: {
+                    ...event.date,
+                },
+            })
+        }
+
+        // --------------------------------
+        // UN SOLO PADRE POR HIJO
+        // --------------------------------
+
+        const splitByChild =
+            new Map<
+                number,
+                TerritorySplitEvent
+            >()
+
+        for (
+            const event of
+            candidateSplits
+        ) {
+
+            if (
+                splitByChild.has(
+                    event.newTerritoryId
+                )
+            ) {
+
+                throw new Error(
+                    `El territorio ${event.newTerritoryId} tiene más de un evento de división`
+                )
+            }
+
+            splitByChild.set(
+                event.newTerritoryId,
+                event
+            )
+        }
+
+        // --------------------------------
+        // DETECTAR CICLOS
+        // --------------------------------
+
+        for (
+            const event of
+            candidateSplits
+        ) {
+
+            const visited =
+                new Set<number>()
+
+            let currentTerritoryId =
+                event.newTerritoryId
+
+            while (
+                true
+            ) {
+
+                if (
+                    visited.has(
+                        currentTerritoryId
+                    )
+                ) {
+
+                    throw new Error(
+                        'La restauración generaría un ciclo territorial'
+                    )
+                }
+
+                visited.add(
+                    currentTerritoryId
+                )
+
+                const split =
+                    splitByChild.get(
+                        currentTerritoryId
+                    )
+
+                if (
+                    split === undefined
+                ) {
+                    break
+                }
+
+                currentTerritoryId =
+                    split.parentTerritoryId
+            }
+        }
+
+        // --------------------------------
+        // RESTAURAR
+        // --------------------------------
+
+        for (
+            const event of
+            events
+        ) {
+
+            this.events.push({
+                ...event,
+
+                date: {
+                    ...event.date,
+                },
+            })
+
+            /*
+            * nextEventId nunca retrocede.
+            */
+            this.nextEventId =
+                Math.max(
+                    this.nextEventId,
+                    event.id + 1
+                )
+        }
+    }
+
+
+    // --------------------------------------------------
+    // RESTAURAR EVENTO DE CAMBIO DE PROPIETARIO
+    // --------------------------------------------------
+    public restoreTerritoryOwnerChangedEvent(
+        event: TerritoryOwnerChangedEvent
+    ) {
+
+        if (
+            this.events.some(
+                existing =>
+                    existing.id ===
+                    event.id
+            )
+        ) {
+
+            throw new Error(
+                `Ya existe un evento con ID ${event.id}`
+            )
+        }
+
+        this.events.push({
+            ...event,
+
+            date: {
+                ...event.date,
+            },
+        })
+
+        this.nextEventId =
+            Math.max(
+                this.nextEventId,
+                event.id + 1
+            )
     }
 }

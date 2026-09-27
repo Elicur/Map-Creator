@@ -180,7 +180,8 @@ const historyController =
         territoryControlManager,
         projectController,
         politicsController,
-        geographyController
+        geographyController,
+        timelineController
     )
 
 const input =

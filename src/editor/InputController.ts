@@ -758,6 +758,7 @@ export class InputController {
             if (wantsToPan) {
 
                 this.geographyController.clearTerritoryPreview()
+                this.politicsController.clearAssignmentPreview()
                 this.drawing.cancelStroke()
 
                 this.camera.startPan(
@@ -1023,7 +1024,7 @@ export class InputController {
                     )
                 ) {
 
-                    this.geographyController.clearTerritoryPreview()
+                    this.politicsController.clearAssignmentPreview()
 
                     return
                 }

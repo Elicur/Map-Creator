@@ -32,6 +32,9 @@ import {
     TimelineController,
 } from '../timeline/TimelineController'
 
+import type {
+    TerritorySplitEvent,
+} from '../timeline/timelineTypes'
 
 export type GeographyEditorBridge = {
 
@@ -1277,17 +1280,21 @@ export class GeographyController {
                 .isInitialized
 
 
+        let timelineSplitEvent:
+            TerritorySplitEvent | null =
+            null
+
         if (
             historicalSplit
         ) {
 
-            this.timelineController
-                .registerTerritorySplit(
-                    result.newTerritoryId,
-                    territoryId
-                )
+            timelineSplitEvent =
+                this.timelineController
+                    .registerTerritorySplit(
+                        result.newTerritoryId,
+                        territoryId
+                    )
         }
-
 
         const countryId =
             historicalSplit
@@ -1329,6 +1336,13 @@ export class GeographyController {
                     result.newTerritoryId,
 
                 stroke,
+
+                timelineSplitEvents:
+                    timelineSplitEvent === null
+                        ? []
+                        : [
+                            timelineSplitEvent,
+                        ],
             })
 
 
@@ -1357,9 +1371,7 @@ export class GeographyController {
     // RECONCILIAR TERRITORIOS CON FRONTERAS
     // --------------------------------------------------
 
-    public reconcileTerritoriesAfterBorderChange(
-        registerTimeline = true
-    ) {
+    public reconcileTerritoriesAfterBorderChange() {
 
         const result =
             this.territoryManager
@@ -1391,29 +1403,6 @@ export class GeographyController {
                             ),
                 })
             )
-
-        // --------------------------------
-        // HISTORIA / LINAJE
-        // --------------------------------
-
-        if (
-            registerTimeline &&
-            this.timelineController
-                .isInitialized
-        ) {
-
-            for (
-                const created of
-                result.createdTerritories
-            ) {
-
-                this.timelineController
-                    .registerTerritorySplit(
-                        created.territoryId,
-                        created.sourceTerritoryId
-                    )
-            }
-        }
 
         // --------------------------------
         // TERRITORIOS ELIMINADOS
@@ -1471,9 +1460,7 @@ export class GeographyController {
     ) {
 
         const result =
-            this.reconcileTerritoriesAfterBorderChange(
-                true
-            )
+            this.reconcileTerritoriesAfterBorderChange()
 
         // --------------------------------
         // EDICIÓN INVÁLIDA
@@ -1493,13 +1480,53 @@ export class GeographyController {
             return
         }
 
+        // --------------------------------
+        const timelineSplitEvents:
+            TerritorySplitEvent[] = []
+
+        if (
+            this.timelineController
+                .isInitialized
+        ) {
+
+            for (
+                const created of
+                result.createdTerritories
+            ) {
+
+                const event =
+                    this.timelineController
+                        .registerTerritorySplit(
+                            created.territoryId,
+                            created.sourceTerritoryId
+                        )
+
+                if (
+                    event !== null
+                ) {
+
+                    timelineSplitEvents.push(
+                        event
+                    )
+                }
+            }
+        }
+
         /*
         * El stroke entra al historial solamente
         * después de comprobar que es válido.
         */
+        const historyStroke:
+            StrokeCommand = {
+
+            ...stroke,
+
+            timelineSplitEvents,
+        }
+
         this.editorBridge
             ?.commitHistory(
-                stroke
+                historyStroke
             )
 
         this.editorBridge

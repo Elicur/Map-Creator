@@ -18,6 +18,13 @@ import type {
     TimelineDate,
 } from './timelineTypes'
 
+import type {
+    TerritorySplitEvent,
+} from './timelineTypes'
+
+import type {
+    TerritoryOwnerChangedEvent,
+} from './timelineTypes'
 
 export type TimelineState =
     Map<number, number | null>
@@ -134,10 +141,8 @@ export class TimelineController {
             return
         }
 
-
         this.started =
             true
-
 
         this.ui.timelinePreviousButton
             .addEventListener(
@@ -145,13 +150,11 @@ export class TimelineController {
                 this.handlePreviousClick
             )
 
-
         this.ui.timelineNextButton
             .addEventListener(
                 'click',
                 this.handleNextClick
             )
-
 
         this.ui.timelineYearInput
             .addEventListener(
@@ -173,10 +176,8 @@ export class TimelineController {
             return
         }
 
-
         this.started =
             false
-
 
         this.ui.timelinePreviousButton
             .removeEventListener(
@@ -184,13 +185,11 @@ export class TimelineController {
                 this.handlePreviousClick
             )
 
-
         this.ui.timelineNextButton
             .removeEventListener(
                 'click',
                 this.handleNextClick
             )
-
 
         this.ui.timelineYearInput
             .removeEventListener(
@@ -212,7 +211,6 @@ export class TimelineController {
             return
         }
 
-
         const initialControl =
             this.territoryManager
                 .getAll()
@@ -229,7 +227,6 @@ export class TimelineController {
                     })
                 )
 
-
         this.timelineManager.setInitialState(
             {
                 year: 0,
@@ -238,10 +235,8 @@ export class TimelineController {
             initialControl
         )
 
-
         this.initialized =
             true
-
 
         this.ui.timelineYearInput.value =
             '0'
@@ -291,12 +286,10 @@ export class TimelineController {
             return
         }
 
-
         const state =
             this.timelineManager.getStateAt(
                 this.timelineManager.date
             )
-
 
         this.stateAppliedHandler?.(
             state
@@ -310,15 +303,14 @@ export class TimelineController {
 
     public changeTerritoryOwner(
         territoryId: number,
-        countryId: number | null
-    ): boolean {
+        countryId: number | null,
+    ): TerritoryOwnerChangedEvent | null {
 
         if (
             !this.initialized
         ) {
-            return false
+            return null
         }
-
 
         const currentCountryId =
             this.timelineManager
@@ -327,27 +319,24 @@ export class TimelineController {
                     this.timelineManager.date
                 )
 
-
         if (
             currentCountryId ===
             countryId
         ) {
-            return false
+            return null
         }
 
-
-        this.timelineManager
-            .addTerritoryOwnerChangedEvent(
-                this.timelineManager.date,
-                territoryId,
-                countryId
-            )
-
+        const event =
+            this.timelineManager
+                .addTerritoryOwnerChangedEvent(
+                    this.timelineManager.date,
+                    territoryId,
+                    countryId
+                )
 
         this.applyCurrentDate()
 
-
-        return true
+        return event
     }
 
 
@@ -369,7 +358,6 @@ export class TimelineController {
                 )
         }
 
-
         return this.timelineManager
             .getTerritoryOwnerAt(
                 territoryId,
@@ -385,20 +373,19 @@ export class TimelineController {
     public registerTerritorySplit(
         territoryId: number,
         parentTerritoryId: number
-    ) {
+    ): TerritorySplitEvent | null {
 
         if (
             !this.initialized
         ) {
-            return
+            return null
         }
 
-
-        this.timelineManager
-            .registerTerritorySplit(
-                territoryId,
+        return this.timelineManager
+            .addTerritorySplitEvent(
+                this.timelineManager.date,
                 parentTerritoryId,
-                this.timelineManager.date
+                territoryId
             )
     }
 
@@ -473,7 +460,6 @@ export class TimelineController {
                     this.ui.timelineYearInput.value
                 )
 
-
             if (
                 !Number.isInteger(
                     year
@@ -487,16 +473,84 @@ export class TimelineController {
                 return
             }
 
-
             this.timelineManager.setYear(
                 year
             )
 
-
             this.applyCurrentDate()
-
 
             this.ui.statusMessage.textContent =
                 `Año ${year}`
         }
+
+        
+    // --------------------------------------------------
+    // ELIMINAR DIVISIONES DEL HISTORY
+    // --------------------------------------------------
+
+    public removeTerritorySplitEvents(
+        events: TerritorySplitEvent[]
+    ) {
+
+        for (
+            const event of
+            events
+        ) {
+
+            this.timelineManager
+                .deleteEvent(
+                    event.id
+                )
+        }
+    }
+
+
+    // --------------------------------------------------
+    // RESTAURAR DIVISIONES DEL HISTORY
+    // --------------------------------------------------
+
+    public restoreTerritorySplitEvents(
+        events: TerritorySplitEvent[]
+    ) {
+
+        this.timelineManager
+            .restoreTerritorySplitEvents(
+                events
+            )
+    }
+
+
+    // --------------------------------------------------
+    // ELIMINAR CAMBIOS DE PROPIETARIO DEL HISTORY
+    // --------------------------------------------------
+    public removeTerritoryOwnerChangedEvent(
+        event:
+            TerritoryOwnerChangedEvent
+    ) {
+
+        this.timelineManager
+            .deleteEvent(
+                event.id
+            )
+
+        this.applyCurrentDate()
+    }
+
+
+    // --------------------------------------------------
+    // RESTAURAR CAMBIOS DE PROPIETARIO DEL HISTORY
+    // --------------------------------------------------
+    public restoreTerritoryOwnerChangedEvent(
+        event:
+            TerritoryOwnerChangedEvent
+    ) {
+
+        this.timelineManager
+            .restoreTerritoryOwnerChangedEvent(
+                event
+            )
+
+        this.applyCurrentDate()
+    }
+
 }

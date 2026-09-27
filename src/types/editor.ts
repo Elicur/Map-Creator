@@ -1,3 +1,11 @@
+import type {
+    TerritorySplitEvent,
+} from '../timeline/timelineTypes'
+
+import type {
+    TerritoryOwnerChangedEvent,
+} from '../timeline/timelineTypes'
+
 export type DrawingTool =
   | 'pencil'
   | 'eraser'
@@ -25,6 +33,8 @@ export type StrokeCommand = {
 	brushSize: number
 
 	points: Point[]
+
+    timelineSplitEvents?: TerritorySplitEvent[]
 }
 
 
@@ -50,6 +60,8 @@ export type SplitTerritoryCommand = {
     newTerritoryId: number
 
     stroke: StrokeCommand
+
+    timelineSplitEvents?: TerritorySplitEvent[]
 }
 
 
@@ -112,6 +124,14 @@ export type DeleteTerritoryCommand = {
     territoryId: number
 }
 
+export type TimelineTerritoryOwnerChangeCommand = {
+    type:
+        'timeline-territory-owner-change'
+
+    event:
+        TerritoryOwnerChangedEvent
+}
+
 export type HistoryCommand =
   | StrokeCommand
   | ClearCommand
@@ -123,3 +143,4 @@ export type HistoryCommand =
   | DeleteCountryCommand
   | AssignTerritoryCountryCommand
   | DeleteTerritoryCommand
+  | TimelineTerritoryOwnerChangeCommand

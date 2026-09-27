@@ -3,30 +3,47 @@ export type TimelineDate = {
     month: number
 }
 
+
 export type TimelineTerritoryControl = {
     territoryId: number
     countryId: number | null
 }
 
-export type TerritoryLineage = {
-    territoryId: number
-
-    parentTerritoryId: number
-
-    splitDate: TimelineDate
-}
 
 export type TerritoryOwnerChangedEvent = {
     id: number
 
-    type: 'territory-owner-changed'
+    type:
+        'territory-owner-changed'
 
-    date: TimelineDate
+    date:
+        TimelineDate
 
-    territoryId: number
+    territoryId:
+        number
 
-    countryId: number | null
+    countryId:
+        number | null
 }
+
+
+export type TerritorySplitEvent = {
+    id: number
+
+    type:
+        'territory-split'
+
+    date:
+        TimelineDate
+
+    parentTerritoryId:
+        number
+
+    newTerritoryId:
+        number
+}
+
 
 export type TimelineEvent =
     | TerritoryOwnerChangedEvent
+    | TerritorySplitEvent

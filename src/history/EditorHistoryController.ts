@@ -42,6 +42,13 @@ import {
     GeographyController,
 } from '../editor/GeographyController'
 
+import {
+    TimelineController,
+} from '../timeline/TimelineController'
+
+import type {
+    TerritorySplitEvent,
+} from '../timeline/timelineTypes'
 
 export class EditorHistoryController {
 
@@ -78,6 +85,9 @@ export class EditorHistoryController {
     private rebuildingHistory =
         false
 
+    private timelineController:
+        TimelineController
+
 
     constructor(
         ui: EditorUI,
@@ -86,45 +96,24 @@ export class EditorHistoryController {
         drawing: DrawingController,
         territoryManager: TerritoryManager,
         countryManager: CountryManager,
-        territoryControlManager:
-            TerritoryControlManager,
-        projectController:
-            ProjectController,
-        politicsController:
-            PoliticsController,
-        geographyController:
-            GeographyController
+        territoryControlManager: TerritoryControlManager,
+        projectController: ProjectController,
+        politicsController: PoliticsController,
+        geographyController: GeographyController,
+        timelineController: TimelineController
     ) {
 
-        this.ui =
-            ui
-
-        this.historyManager =
-            historyManager
-
-        this.camera =
-            camera
-
-        this.drawing =
-            drawing
-
-        this.territoryManager =
-            territoryManager
-
-        this.countryManager =
-            countryManager
-
-        this.territoryControlManager =
-            territoryControlManager
-
-        this.projectController =
-            projectController
-
-        this.politicsController =
-            politicsController
-
-        this.geographyController =
-            geographyController
+        this.ui = ui
+        this.historyManager = historyManager
+        this.camera = camera
+        this.drawing = drawing
+        this.territoryManager = territoryManager
+        this.countryManager = countryManager
+        this.territoryControlManager = territoryControlManager
+        this.projectController = projectController
+        this.politicsController = politicsController
+        this.geographyController = geographyController
+        this.timelineController = timelineController
     }
 
 
@@ -171,17 +160,14 @@ export class EditorHistoryController {
             return
         }
 
-
         const nextCommand =
             this.historyManager.peekUndo()
-
 
         if (
             nextCommand === null
         ) {
             return
         }
-
 
         if (
             this.geographyController
@@ -197,10 +183,8 @@ export class EditorHistoryController {
             return
         }
 
-
         const command =
             this.historyManager.undo()
-
 
         if (
             command === null
@@ -208,13 +192,31 @@ export class EditorHistoryController {
             return
         }
 
+        const timelineSplitEvents =
+            this.getTimelineSplitEvents(
+                command
+            )
 
         await this.redrawHistory()
 
+        if (
+            command.type ===
+            'timeline-territory-owner-change'
+        ) {
+
+            this.timelineController
+                .removeTerritoryOwnerChangedEvent(
+                    command.event
+                )
+        }
+
+        this.timelineController
+            .removeTerritorySplitEvents(
+                timelineSplitEvents
+            )
 
         this.projectController
             .updateDirtyState()
-
 
         this.showHistoryMessage(
             command,
@@ -237,17 +239,14 @@ export class EditorHistoryController {
             return
         }
 
-
         const nextCommand =
             this.historyManager.peekRedo()
-
 
         if (
             nextCommand === null
         ) {
             return
         }
-
 
         if (
             this.geographyController
@@ -263,10 +262,8 @@ export class EditorHistoryController {
             return
         }
 
-
         const command =
             this.historyManager.redo()
-
 
         if (
             command === null
@@ -274,13 +271,31 @@ export class EditorHistoryController {
             return
         }
 
+        const timelineSplitEvents =
+            this.getTimelineSplitEvents(
+                command
+            )
 
         await this.redrawHistory()
 
+        if (
+            command.type ===
+            'timeline-territory-owner-change'
+        ) {
+
+            this.timelineController
+                .restoreTerritoryOwnerChangedEvent(
+                    command.event
+                )
+        }
+
+        this.timelineController
+        .restoreTerritorySplitEvents(
+            timelineSplitEvents
+        )
 
         this.projectController
             .updateDirtyState()
-
 
         this.showHistoryMessage(
             command,
@@ -301,20 +316,16 @@ export class EditorHistoryController {
             return
         }
 
-
         this.rebuildingHistory =
             true
-
 
         try {
 
             this.geographyController
                 .clearTerritoryPreview()
 
-
             this.politicsController
                 .clearAssignmentPreview()
-
 
             // --------------------------------
             // RESTAURAR ESTADO BASE
@@ -324,13 +335,11 @@ export class EditorHistoryController {
                 await this.projectController
                     .restoreHistoryBase()
 
-
             if (
                 !restoredBase
             ) {
 
                 this.drawing.clear()
-
 
                 /*
                  * No reutilizamos IDs históricos.
@@ -339,12 +348,10 @@ export class EditorHistoryController {
                     false
                 )
 
-
                 this.countryManager.reset()
 
                 this.territoryControlManager.reset()
             }
-
 
             // --------------------------------
             // REPRODUCIR COMANDOS
@@ -368,13 +375,9 @@ export class EditorHistoryController {
                         command
                     )
 
-
                     const result =
                         this.geographyController
-                            .reconcileTerritoriesAfterBorderChange(
-                                false
-                            )
-
+                            .reconcileTerritoriesAfterBorderChange()
 
                     if (
                         result.status !==
@@ -386,10 +389,8 @@ export class EditorHistoryController {
                         )
                     }
 
-
                     continue
                 }
-
 
                 // -----------------------------
                 // LIMPIAR
@@ -402,7 +403,6 @@ export class EditorHistoryController {
 
                     this.drawing.clear()
 
-
                     /*
                      * Importante:
                      *
@@ -413,13 +413,10 @@ export class EditorHistoryController {
                         false
                     )
 
-
                     this.territoryControlManager.reset()
-
 
                     continue
                 }
-
 
                 // -----------------------------
                 // CREAR TERRITORIO
@@ -437,10 +434,8 @@ export class EditorHistoryController {
                         this.drawing.getPixels()
                     )
 
-
                     continue
                 }
-
 
                 // -----------------------------
                 // ELIMINAR TERRITORIO
@@ -455,16 +450,13 @@ export class EditorHistoryController {
                         command.territoryId
                     )
 
-
                     this.territoryControlManager.assign(
                         command.territoryId,
                         null
                     )
 
-
                     continue
                 }
-
 
                 // -----------------------------
                 // DIVIDIR TERRITORIO
@@ -483,14 +475,12 @@ export class EditorHistoryController {
                         command.stroke
                     )
 
-
                     const result =
                         this.territoryManager.split(
                             command.territoryId,
                             this.drawing.getPixels(),
                             command.newTerritoryId
                         )
-
 
                     if (
                         result.status ===
@@ -503,12 +493,10 @@ export class EditorHistoryController {
                                     command.territoryId
                                 )
 
-
                         this.territoryControlManager.assign(
                             command.newTerritoryId,
                             countryId
                         )
-
 
                         this.politicsController
                             .applyTerritoryCountryColor(
@@ -517,10 +505,8 @@ export class EditorHistoryController {
                             )
                     }
 
-
                     continue
                 }
-
 
                 // -----------------------------
                 // RENOMBRAR TERRITORIO
@@ -536,10 +522,8 @@ export class EditorHistoryController {
                         command.name
                     )
 
-
                     continue
                 }
-
 
                 // -----------------------------
                 // CREAR PAÍS
@@ -556,10 +540,8 @@ export class EditorHistoryController {
                         command.color
                     )
 
-
                     continue
                 }
-
 
                 // -----------------------------
                 // ASIGNAR PAÍS
@@ -575,17 +557,14 @@ export class EditorHistoryController {
                         command.countryId
                     )
 
-
                     this.politicsController
                         .applyTerritoryCountryColor(
                             command.territoryId,
                             command.countryId
                         )
 
-
                     continue
                 }
-
 
                 // -----------------------------
                 // ACTUALIZAR PAÍS
@@ -602,16 +581,13 @@ export class EditorHistoryController {
                         command.color
                     )
 
-
                     this.politicsController
                         .recolorCountryTerritories(
                             command.countryId
                         )
 
-
                     continue
                 }
-
 
                 // -----------------------------
                 // ELIMINAR PAÍS
@@ -628,7 +604,6 @@ export class EditorHistoryController {
                                 command.countryId
                             )
 
-
                     for (
                         const territoryId of
                         territoryIds
@@ -639,20 +614,36 @@ export class EditorHistoryController {
                             null
                         )
 
-
                         this.territoryManager
                             .setNeutralColor(
                                 territoryId
                             )
                     }
 
-
                     this.countryManager.delete(
                         command.countryId
                     )
                 }
-            }
 
+
+                // -----------------------------
+                // CAMBIO DE PROPIETARIO DE TERRITORIO
+                // -----------------------------
+                if (
+                    command.type ===
+                    'timeline-territory-owner-change'
+                ) {
+
+                    /*
+                    * El TimelineManager es la fuente de verdad
+                    * para los cambios políticos históricos.
+                    *
+                    * No lo reconstruimos aquí como asignación
+                    * estática.
+                    */
+                    continue
+                }
+            }
 
             // --------------------------------
             // REFRESCAR UI
@@ -660,7 +651,6 @@ export class EditorHistoryController {
 
             this.politicsController
                 .refreshUI()
-
 
             this.geographyController
                 .refreshTerritorySelection()
@@ -706,7 +696,6 @@ export class EditorHistoryController {
                 ? 'Deshecho'
                 : 'Rehecho'
 
-
         if (
             command.type ===
             'rename-territory'
@@ -717,7 +706,6 @@ export class EditorHistoryController {
                     command.territoryId
                 )
 
-
             if (
                 territory !== null
             ) {
@@ -726,10 +714,8 @@ export class EditorHistoryController {
                     `${prefix}: Territorio #${territory.id} ahora se llama "${territory.name}"`
             }
 
-
             return
         }
-
 
         if (
             command.type ===
@@ -744,7 +730,6 @@ export class EditorHistoryController {
             return
         }
 
-
         if (
             command.type ===
             'split-territory'
@@ -757,7 +742,6 @@ export class EditorHistoryController {
 
             return
         }
-
 
         if (
             command.type ===
@@ -772,7 +756,6 @@ export class EditorHistoryController {
             return
         }
 
-
         if (
             command.type ===
             'assign-territory-country'
@@ -784,7 +767,6 @@ export class EditorHistoryController {
                         command.territoryId
                     )
 
-
             if (
                 currentCountryId === null
             ) {
@@ -795,12 +777,10 @@ export class EditorHistoryController {
                 return
             }
 
-
             const country =
                 this.countryManager.getById(
                     currentCountryId
                 )
-
 
             if (
                 country !== null
@@ -810,10 +790,8 @@ export class EditorHistoryController {
                     `${prefix}: Territorio #${command.territoryId} pertenece a "${country.name}"`
             }
 
-
             return
         }
-
 
         if (
             command.type ===
@@ -828,7 +806,6 @@ export class EditorHistoryController {
             return
         }
 
-
         if (
             command.type ===
             'stroke'
@@ -842,7 +819,6 @@ export class EditorHistoryController {
             return
         }
 
-
         if (
             command.type ===
             'update-country'
@@ -853,7 +829,6 @@ export class EditorHistoryController {
                     command.countryId
                 )
 
-
             if (
                 country !== null
             ) {
@@ -862,10 +837,8 @@ export class EditorHistoryController {
                     `${prefix}: "${country.name}" actualizado`
             }
 
-
             return
         }
-
 
         if (
             command.type ===
@@ -876,7 +849,6 @@ export class EditorHistoryController {
                 this.countryManager.getById(
                     command.countryId
                 )
-
 
             if (
                 action === 'undo' &&
@@ -889,9 +861,53 @@ export class EditorHistoryController {
                 return
             }
 
-
             this.ui.statusMessage.textContent =
                 'Rehecho: país eliminado'
         }
+
+        if (
+            command.type ===
+            'timeline-territory-owner-change'
+        ) {
+
+            this.ui.statusMessage.textContent =
+                action === 'undo'
+                    ? 'Cambio histórico de territorio deshecho'
+                    : 'Cambio histórico de territorio rehecho'
+
+            return
+        }
+    }
+
+
+    // --------------------------------------------------
+    // EVENTOS DE TIMELINE ASOCIADOS AL COMANDO
+    // --------------------------------------------------
+
+    private getTimelineSplitEvents(
+        command: HistoryCommand
+    ): TerritorySplitEvent[] {
+
+        if (
+            command.type !==
+                'stroke' &&
+            command.type !==
+                'split-territory'
+        ) {
+            return []
+        }
+
+        return (
+            command.timelineSplitEvents
+            ?? []
+        ).map(
+            event => ({
+                ...event,
+
+                date: {
+                    ...event.date,
+                },
+            })
+        )
     }
 }

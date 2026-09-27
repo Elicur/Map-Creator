@@ -1146,13 +1146,11 @@ export class PoliticsController {
                 territoryId
             )
 
-
         if (
             territory === null
         ) {
             return false
         }
-
 
         // --------------------------------
         // ESTADO INICIAL
@@ -1169,7 +1167,6 @@ export class PoliticsController {
                         territoryId
                     )
 
-
             if (
                 currentCountryId ===
                 countryId
@@ -1177,18 +1174,15 @@ export class PoliticsController {
                 return false
             }
 
-
             this.territoryControlManager.assign(
                 territoryId,
                 countryId
             )
 
-
             this.applyTerritoryCountryColor(
                 territoryId,
                 countryId
             )
-
 
             this.editorBridge
                 ?.commitHistory({
@@ -1200,10 +1194,8 @@ export class PoliticsController {
                     countryId,
                 })
 
-
             return true
         }
-
 
         // --------------------------------
         // GEOGRAFÍA REABIERTA
@@ -1223,12 +1215,28 @@ export class PoliticsController {
             return false
         }
 
+        const event =
+            this.timelineController
+                .changeTerritoryOwner(
+                    territoryId,
+                    countryId
+                )
 
-        return this.timelineController
-            .changeTerritoryOwner(
-                territoryId,
-                countryId
-            )
+        if (
+            event === null
+        ) {
+            return false
+        }
+
+        this.editorBridge
+            ?.commitHistory({
+                type:
+                    'timeline-territory-owner-change',
+
+                event,
+            })
+
+        return true
     }
 
 
