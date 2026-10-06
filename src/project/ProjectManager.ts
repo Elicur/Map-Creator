@@ -10,8 +10,13 @@ import type {
 
 import type {
     MapProject,
+    MapProjectV2,
     TerritoryControlState,
 } from './projectTypes'
+
+import type {
+    TimelineProjectState,
+} from '../timeline/timelineTypes'
 
 import {
     DrawingController,
@@ -74,12 +79,14 @@ export class ProjectManager {
 
     public exportToJson(
         geographyLocked: boolean,
-        projectName: string
+        projectName: string,
+        timeline:
+            TimelineProjectState | null
     ): string {
 
-        const project: MapProject = {
+        const project: MapProjectV2 = {
             format: 'map-creator',
-            version: 1,
+            version: 2,
 
             name:
                 projectName,
@@ -116,6 +123,8 @@ export class ProjectManager {
             territoryControl:
                 this.territoryControlManager
                     .getAllAssignments(),
+
+            timeline,
         }
 
 
@@ -136,6 +145,8 @@ export class ProjectManager {
     ): Promise<{
         geographyLocked: boolean
         name: string
+        timeline:
+            TimelineProjectState | null
     }> {
 
         const project =
@@ -143,32 +154,28 @@ export class ProjectManager {
                 json
             )
 
-
         const territoryIds =
             decodeRle(
                 project.territoryRasterRle,
                 MAP_WIDTH * MAP_HEIGHT
             )
 
-
         /*
-         * Validamos las referencias antes
-         * de modificar el proyecto actual.
-         */
+        * Validamos las referencias antes
+        * de modificar el proyecto actual.
+        */
         validateReferences(
             project
         )
 
-
         /*
-         * La imagen se carga antes de empezar
-         * a modificar managers. Si está dañada,
-         * el proyecto actual sigue intacto.
-         */
+        * La imagen se carga antes de empezar
+        * a modificar managers. Si está dañada,
+        * el proyecto actual sigue intacto.
+        */
         await this.drawing.importImage(
             project.borderImage
         )
-
 
         // -----------------------------
         // TERRITORIOS
@@ -179,13 +186,11 @@ export class ProjectManager {
             territoryIds
         )
 
-
         // -----------------------------
         // PAÍSES
         // -----------------------------
 
         this.countryManager.reset()
-
 
         for (
             const country of
@@ -199,13 +204,11 @@ export class ProjectManager {
             )
         }
 
-
         // -----------------------------
         // CONTROL POLÍTICO
         // -----------------------------
 
         this.territoryControlManager.reset()
-
 
         for (
             const control of
@@ -217,18 +220,26 @@ export class ProjectManager {
                 control.countryId
             )
 
-
             this.applyCountryColor(
                 control
             )
         }
 
+        // -----------------------------
+        // RESULTADO
+        // -----------------------------
 
         return {
             geographyLocked:
                 project.geographyLocked,
+
             name:
-                project.name
+                project.name,
+
+            timeline:
+                project.version === 2
+                    ? project.timeline
+                    : null,
         }
     }
 
@@ -458,7 +469,8 @@ function parseProject(
     }
 
     if (
-        project.version !== 1
+        project.version !== 1 &&
+        project.version !== 2
     ) {
         throw new Error(
             `Versión de proyecto no soportada: ${project.version}`

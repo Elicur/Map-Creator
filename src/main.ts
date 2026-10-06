@@ -166,7 +166,8 @@ const projectController =
         ui,
         projectManager,
         localProjectStore,
-        historyManager
+        historyManager,
+        timelineController,
     )
 
 const historyController =

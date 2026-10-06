@@ -26,6 +26,10 @@ import type {
     TerritoryOwnerChangedEvent,
 } from './timelineTypes'
 
+import type {
+    TimelineProjectState,
+} from './timelineTypes'
+
 export type TimelineState =
     Map<number, number | null>
 
@@ -553,4 +557,56 @@ export class TimelineController {
         this.applyCurrentDate()
     }
 
+
+    // --------------------------------------------------
+    // EXPORTAR TIMELINE DEL PROYECTO
+    // --------------------------------------------------
+
+    public exportProjectState():
+        TimelineProjectState | null {
+
+        if (
+            !this.initialized
+        ) {
+            return null
+        }
+
+        return this.timelineManager
+            .exportState()
+    }
+
+
+    // --------------------------------------------------
+    // IMPORTAR TIMELINE DEL PROYECTO
+    // --------------------------------------------------
+
+    public importProjectState(
+        state:
+            TimelineProjectState | null
+    ) {
+
+        if (
+            state === null
+        ) {
+
+            this.reset()
+
+            return
+        }
+
+        this.timelineManager
+            .importState(
+                state
+            )
+
+        this.initialized =
+            true
+
+        this.ui.timelineYearInput.value =
+            this.timelineManager
+                .year
+                .toString()
+
+        this.applyCurrentDate()
+    }
 }

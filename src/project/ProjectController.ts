@@ -18,6 +18,9 @@ import {
     HistoryManager,
 } from '../history/HistoryManager'
 
+import {
+    TimelineController,
+} from '../timeline/TimelineController'
 
 const LAST_LOCAL_PROJECT_KEY =
     'map-creator-last-project-id'
@@ -40,67 +43,53 @@ export type ProjectEditorBridge = {
 
 export class ProjectController {
 
-    private ui:
-        EditorUI
+    private ui: EditorUI
 
-    private projectManager:
-        ProjectManager
+    private projectManager: ProjectManager
 
-    private localProjectStore:
-        LocalProjectStore
+    private localProjectStore: LocalProjectStore
 
-    private historyManager:
-        HistoryManager
+    private historyManager: HistoryManager
 
     private editorBridge:
         ProjectEditorBridge | null =
         null
 
-    private started =
-        false
+    private started = false
 
-    private historyBaseProjectJson:
-        string | null = null
+    private historyBaseProjectJson: string | null = null
 
-    private currentLocalProjectId:
-        string | null = null
+    private currentLocalProjectId: string | null = null
 
-    private projectDirty =
-        false
+    private projectDirty = false
 
-    private savedHistoryStateId =
-        0
+    private savedHistoryStateId = 0
 
-    private savedGeographyLocked =
-        false
+    private savedGeographyLocked = false
 
-    private savedProjectName =
-        'Mi mapa'
+    private savedProjectName = 'Mi mapa'
 
-    private requiresLocalSave =
-        false
+    private requiresLocalSave = false
 
+    private timelineController: TimelineController
 
     constructor(
         ui: EditorUI,
         projectManager: ProjectManager,
-        localProjectStore:
-            LocalProjectStore,
-        historyManager:
-            HistoryManager
+        localProjectStore: LocalProjectStore,
+        historyManager: HistoryManager,
+        timelineController: TimelineController
     ) {
 
-        this.ui =
-            ui
+        this.ui = ui
 
-        this.projectManager =
-            projectManager
+        this.projectManager = projectManager
 
-        this.localProjectStore =
-            localProjectStore
+        this.localProjectStore = localProjectStore
 
-        this.historyManager =
-            historyManager
+        this.historyManager = historyManager
+
+        this.timelineController = timelineController
     }
 
 
@@ -451,7 +440,9 @@ export class ProjectController {
                                 ?.getGeographyLocked()
                             ?? false,
 
-                            this.getProjectName()
+                            this.getProjectName(),
+
+                            this.timelineController.exportProjectState()
                         )
 
 
@@ -595,12 +586,17 @@ export class ProjectController {
                     this.projectManager
                         .exportToJson(
                             result.geographyLocked,
-                            result.name
+                            result.name,
+                            result.timeline
                         )
 
 
                 this.historyManager.reset()
 
+                this.timelineController
+                    .importProjectState(
+                        result.timeline
+                    )
 
                 this.editorBridge
                     ?.applyLoadedProject(
@@ -666,7 +662,6 @@ export class ProjectController {
                 const name =
                     this.getProjectName()
 
-
                 const json =
                     this.projectManager
                         .exportToJson(
@@ -674,9 +669,10 @@ export class ProjectController {
                                 ?.getGeographyLocked()
                             ?? false,
 
-                            name
-                        )
+                            name,
 
+                            this.timelineController.exportProjectState()
+                        )
 
                 const record =
                     await this.localProjectStore
@@ -686,30 +682,23 @@ export class ProjectController {
                             json
                         )
 
-
                 this.currentLocalProjectId =
                     record.id
-
 
                 this.rememberLastLocalProject(
                     record.id
                 )
 
-
                 this.ui.projectNameInput.value =
                     record.name
-
 
                 this.requiresLocalSave =
                     false
 
-
                 this.markCurrentStateAsSaved()
-
 
                 this.ui.statusMessage.textContent =
                     `Mapa "${record.name}" guardado`
-
 
                 if (
                     !this.ui.localProjectsPanel
@@ -728,7 +717,6 @@ export class ProjectController {
                 console.error(
                     error
                 )
-
 
                 this.ui.statusMessage.textContent =
                     'No se pudo guardar el mapa'
@@ -986,14 +974,12 @@ export class ProjectController {
                     `Abrir "${project.name}"`
                 )
 
-
             if (
                 !shouldLoad
             ) {
                 return
             }
         }
-
 
         try {
 
@@ -1003,49 +989,45 @@ export class ProjectController {
                         project.json
                     )
 
-
             this.historyBaseProjectJson =
                 this.projectManager
                     .exportToJson(
                         result.geographyLocked,
-                        result.name
+                        result.name,
+                        result.timeline
                     )
 
-
             this.historyManager.reset()
-
 
             this.currentLocalProjectId =
                 project.id
 
-
             this.requiresLocalSave =
                 false
-
 
             this.rememberLastLocalProject(
                 project.id
             )
 
-
             this.ui.projectNameInput.value =
                 result.name
 
+            this.timelineController
+                .importProjectState(
+                    result.timeline
+                )
 
             this.editorBridge
                 ?.applyLoadedProject(
                     result.geographyLocked
                 )
 
-
             this.markCurrentStateAsSaved()
-
 
             this.ui.localProjectsPanel
                 .classList.add(
                     'hidden'
                 )
-
 
             this.ui.statusMessage.textContent =
                 `Mapa "${result.name}" cargado`
@@ -1077,13 +1059,11 @@ export class ProjectController {
                 `¿Eliminar "${project.name}" de los mapas guardados?`
             )
 
-
         if (
             !shouldDelete
         ) {
             return
         }
-
 
         try {
 
@@ -1091,7 +1071,6 @@ export class ProjectController {
                 .delete(
                     project.id
                 )
-
 
             if (
                 this.currentLocalProjectId ===
@@ -1101,20 +1080,15 @@ export class ProjectController {
                 this.currentLocalProjectId =
                     null
 
-
                 this.requiresLocalSave =
                     true
 
-
                 this.forgetLastLocalProject()
-
 
                 this.updateDirtyState()
             }
 
-
             await this.refreshLocalProjectsUI()
-
 
             this.ui.statusMessage.textContent =
                 `Mapa "${project.name}" eliminado del almacenamiento`
@@ -1125,7 +1099,6 @@ export class ProjectController {
             console.error(
                 error
             )
-
 
             this.ui.statusMessage.textContent =
                 'No se pudo eliminar el mapa'

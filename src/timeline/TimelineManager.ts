@@ -1,6 +1,7 @@
 import type {
     TimelineDate,
     TimelineEvent,
+    TimelineProjectState,
     TimelineTerritoryControl,
     TerritoryOwnerChangedEvent,
     TerritorySplitEvent,
@@ -1233,5 +1234,145 @@ export class TimelineManager {
                 this.nextEventId,
                 event.id + 1
             )
+    }
+
+
+    // --------------------------------------------------
+    // EXPORTAR ESTADO
+    // --------------------------------------------------
+
+    public exportState():
+        TimelineProjectState {
+
+        const initialTerritoryControl:
+            TimelineTerritoryControl[] = []
+
+        for (
+            const [
+                territoryId,
+                countryId,
+            ] of this.initialTerritoryControl
+        ) {
+
+            initialTerritoryControl.push({
+                territoryId,
+                countryId,
+            })
+        }
+
+        return {
+            initialDate: {
+                ...this.initialDate,
+            },
+
+            initialTerritoryControl,
+
+            events:
+                this.getEvents(),
+
+            nextEventId:
+                this.nextEventId,
+        }
+    }
+
+
+    // --------------------------------------------------
+    // IMPORTAR ESTADO
+    // --------------------------------------------------
+
+    public importState(
+        state: TimelineProjectState
+    ) {
+
+        this.validateDate(
+            state.initialDate
+        )
+
+        if (
+            !Number.isInteger(
+                state.nextEventId
+            ) ||
+            state.nextEventId < 1
+        ) {
+
+            throw new Error(
+                'nextEventId del timeline no es válido'
+            )
+        }
+
+        /*
+        * setInitialState limpia los eventos
+        * y reinicia el allocator.
+        */
+        this.setInitialState(
+            state.initialDate,
+            state.initialTerritoryControl
+        )
+
+        const ownerEvents =
+            state.events
+                .filter(
+                    (
+                        event
+                    ): event is TerritoryOwnerChangedEvent =>
+                        event.type ===
+                        'territory-owner-changed'
+                )
+                .sort(
+                    (
+                        a,
+                        b
+                    ) =>
+                        a.id - b.id
+                )
+
+        const splitEvents =
+            state.events
+                .filter(
+                    (
+                        event
+                    ): event is TerritorySplitEvent =>
+                        event.type ===
+                        'territory-split'
+                )
+
+        /*
+        * Conservamos exactamente los IDs
+        * históricos originales.
+        */
+        for (
+            const event of
+            ownerEvents
+        ) {
+
+            this.restoreTerritoryOwnerChangedEvent(
+                event
+            )
+        }
+
+        this.restoreTerritorySplitEvents(
+            splitEvents
+        )
+
+        /*
+        * El archivo puede tener un allocator
+        * más adelantado que el mayor evento
+        * actualmente existente.
+        */
+        this.nextEventId =
+            Math.max(
+                this.nextEventId,
+                state.nextEventId
+            )
+
+        /*
+        * La fecha visible NO se persiste.
+        *
+        * Al cargar abrimos el timeline desde
+        * su fecha inicial.
+        */
+        this.currentDate = {
+            ...this.initialDate,
+        }
     }
 }

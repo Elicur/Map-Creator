@@ -44,6 +44,21 @@ export type TerritorySplitEvent = {
 }
 
 
+export type TimelineProjectState = {
+    initialDate:
+        TimelineDate
+
+    initialTerritoryControl:
+        TimelineTerritoryControl[]
+
+    events:
+        TimelineEvent[]
+
+    nextEventId:
+        number
+}
+
+
 export type TimelineEvent =
     | TerritoryOwnerChangedEvent
     | TerritorySplitEvent

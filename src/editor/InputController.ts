@@ -1301,15 +1301,6 @@ export class InputController {
         geographyLocked: boolean
     ) {
 
-        /*
-        * El timeline todavía no se persiste.
-        *
-        * Cada proyecto cargado empieza con
-        * un timeline limpio basado en su
-        * estado político actual.
-        */
-        this.timelineController.reset()
-
         this.geographyController.clearTerritoryPreview()
 
         this.geographyController.clearTerritorySelection()
@@ -1318,11 +1309,9 @@ export class InputController {
             'select'
         )
 
-        this.geographyController
-            .reset()
+        this.geographyController.reset()
 
-        this.geographyController
-            .setLockedState(
+        this.geographyController.setLockedState(
                 geographyLocked
             )
 
