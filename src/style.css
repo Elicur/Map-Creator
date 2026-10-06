@@ -251,7 +251,13 @@ select {
 
     overflow: hidden;
 
-    background: #18191b;
+    background:
+        radial-gradient(
+            circle at 50% 35%,
+            #2a2d33 0%,
+            #202226 42%,
+            #151619 100%
+        );
 
     touch-action: none;
 
@@ -274,9 +280,39 @@ select {
 
     transform-origin: 0 0;
 
-    outline: 1px solid #555;
+    background:
+        #f2f0e9;
 
-    will-change: transform;
+    outline:
+        1px solid
+        rgba(
+            255,
+            255,
+            255,
+            0.16
+        );
+
+    box-shadow:
+        0 4px 12px
+        rgba(
+            0,
+            0,
+            0,
+            0.24
+        ),
+        0 24px 70px
+        rgba(
+            0,
+            0,
+            0,
+            0.38
+        );
+
+    will-change:
+        transform;
+
+    backface-visibility:
+        hidden;
 }
 
 
@@ -296,6 +332,8 @@ select {
     height: 900px;
 
     touch-action: none;
+
+    image-rendering: auto;
 }
 
 
@@ -720,4 +758,19 @@ select {
 
 .timeline-bar input {
     width: 90px;
+}
+
+
+/* ------------------------------------------------
+   POLITICAL BORDER RENDERER
+------------------------------------------------ */
+
+.political-border-canvas {
+    z-index: 3;
+
+    pointer-events: none;
+
+    image-rendering: auto;
+
+    opacity: 1;
 }

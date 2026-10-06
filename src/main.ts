@@ -68,6 +68,10 @@ import {
     EditorHistoryController,
 } from './history/EditorHistoryController'
 
+import {
+    MapRenderer,
+} from './rendering/MapRenderer'
+
 // --------------------------------------------------
 // INTERFAZ
 // --------------------------------------------------
@@ -149,6 +153,45 @@ const geographyController =
         timelineController
     )
 
+const mapRenderer =
+    new MapRenderer(
+        ui.mapContainer,
+        ui.borderCanvas,
+        territoryManager
+    )
+
+mapRenderer
+    .setTerritoryOwnerResolver(
+        territoryId => {
+
+            if (
+                timelineController
+                    .isInitialized
+            ) {
+
+                return timelineController
+                    .getTerritoryOwnerAtCurrentDate(
+                        territoryId
+                    )
+            }
+
+
+            return territoryControlManager
+                .getCountryId(
+                    territoryId
+                )
+        }
+    )
+
+camera.setViewChangedHandler(
+    zoom => {
+
+        mapRenderer.setZoom(
+            zoom
+        )
+    }
+)
+
 const projectManager =
     new ProjectManager(
         drawing,
@@ -198,6 +241,7 @@ const input =
         politicsController,
         geographyController,
         historyController,
+        mapRenderer
     )
 
 
@@ -212,6 +256,8 @@ drawing.clear()
 input.start()
 
 preview.clear()
+
+mapRenderer.requestRefresh()
 
 requestAnimationFrame(
     () => {

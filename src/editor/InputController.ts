@@ -47,6 +47,10 @@ import {
     EditorHistoryController,
 } from '../history/EditorHistoryController'
 
+import {
+    MapRenderer,
+} from '../rendering/MapRenderer'
+
 export class InputController {
 
     private ui: EditorUI
@@ -73,6 +77,8 @@ export class InputController {
 
     private historyController: EditorHistoryController
 
+    private mapRenderer: MapRenderer
+
     constructor(
         ui: EditorUI,
         camera: CameraController,
@@ -84,7 +90,8 @@ export class InputController {
         timelineController: TimelineController,
         politicsController: PoliticsController,
         geographyController: GeographyController,
-        historyController: EditorHistoryController
+        historyController: EditorHistoryController,
+        mapRenderer: MapRenderer
     ) {
         this.ui = ui
         this.camera = camera
@@ -97,6 +104,7 @@ export class InputController {
         this.politicsController = politicsController
         this.geographyController = geographyController
         this.historyController = historyController
+        this.mapRenderer = mapRenderer
 
         this.projectController
             .setEditorBridge({
@@ -154,6 +162,13 @@ export class InputController {
                 getGeographyLocked:
                     () =>
                         this.geographyController.isLocked,
+
+                refreshMapRenderer:
+                    () => {
+
+                        this.mapRenderer
+                            .requestRefresh()
+                    },
             })
 
         this.geographyController
@@ -216,6 +231,22 @@ export class InputController {
                             .applyTerritoryCountryColor(
                                 territoryId,
                                 countryId
+                            )
+                    },
+
+                refreshMapRenderer:
+                    () => {
+
+                        this.mapRenderer
+                            .requestRefresh()
+                    },
+
+                setMapRendererGeographyLocked:
+                    locked => {
+
+                        this.mapRenderer
+                            .setGeographyLocked(
+                                locked
                             )
                     },
             })

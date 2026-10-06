@@ -68,6 +68,14 @@ export type GeographyEditorBridge = {
             territoryId: number,
             countryId: number | null
         ) => void
+
+    refreshMapRenderer:
+        () => void
+
+    setMapRendererGeographyLocked:
+        (
+            locked: boolean
+        ) => void
 }
 
 
@@ -175,6 +183,10 @@ export class GeographyController {
         this.geographyLocked =
             locked
 
+        this.editorBridge
+            ?.setMapRendererGeographyLocked(
+                locked
+            )
 
         if (
             locked
@@ -183,7 +195,6 @@ export class GeographyController {
             this.timelineController
                 .initializeIfNeeded()
         }
-
 
         this.updateLockUI()
     }
@@ -338,7 +349,6 @@ export class GeographyController {
                 this.drawing.getPixels()
             )
 
-
         if (
             result.status ===
             'created'
@@ -359,6 +369,8 @@ export class GeographyController {
                         result.seedY,
                 })
 
+            this.editorBridge
+                ?.refreshMapRenderer()
 
             this.ui.statusMessage.textContent =
                 `Territorio #${result.territory.id} creado`
@@ -688,7 +700,6 @@ export class GeographyController {
                 return
             }
 
-
             if (
                 this.selectedTerritoryId ===
                 null
@@ -696,12 +707,10 @@ export class GeographyController {
                 return
             }
 
-
             const territory =
                 this.territoryManager.getById(
                     this.selectedTerritoryId
                 )
-
 
             if (
                 territory === null
@@ -709,12 +718,10 @@ export class GeographyController {
                 return
             }
 
-
             const shouldDelete =
                 window.confirm(
                     `¿Eliminar el territorio "${territory.name}"?`
                 )
-
 
             if (
                 !shouldDelete
@@ -722,16 +729,13 @@ export class GeographyController {
                 return
             }
 
-
             const territoryId =
                 territory.id
-
 
             const deletedTerritory =
                 this.territoryManager.delete(
                     territoryId
                 )
-
 
             if (
                 deletedTerritory === null
@@ -739,12 +743,10 @@ export class GeographyController {
                 return
             }
 
-
             this.territoryControlManager.assign(
                 territoryId,
                 null
             )
-
 
             this.editorBridge
                 ?.commitHistory({
@@ -754,11 +756,9 @@ export class GeographyController {
                     territoryId,
                 })
 
-
             this.clearTerritoryPreview()
 
             this.clearTerritorySelection()
-
 
             this.ui.statusMessage.textContent =
                 `Territorio "${deletedTerritory.name}" eliminado`
@@ -782,13 +782,11 @@ export class GeographyController {
                 return
             }
 
-
             this.editorBridge
                 ?.commitHistory({
                     type:
                         'clear',
                 })
-
 
             this.drawing.clear()
 
@@ -806,10 +804,11 @@ export class GeographyController {
 
             this.clearTerritoryPreview()
 
-
             this.editorBridge
                 ?.refreshPoliticsUI()
 
+            this.editorBridge
+                ?.refreshMapRenderer()
 
             this.ui.statusMessage.textContent =
                 'Mapa limpiado'
@@ -830,13 +829,11 @@ export class GeographyController {
             y,
         }
 
-
         if (
             this.previewTimer !== null
         ) {
             return
         }
-
 
         this.previewTimer =
             window.setTimeout(
@@ -845,14 +842,11 @@ export class GeographyController {
                     this.previewTimer =
                         null
 
-
                     const position =
                         this.pendingPreviewPosition
 
-
                     this.pendingPreviewPosition =
                         null
-
 
                     if (
                         position === null ||
@@ -865,7 +859,6 @@ export class GeographyController {
 
                         return
                     }
-
 
                     this.updateTerritoryPreview(
                         position.x,
@@ -890,7 +883,6 @@ export class GeographyController {
                     this.drawing.getPixels()
                 )
 
-
         if (
             region === null
         ) {
@@ -899,7 +891,6 @@ export class GeographyController {
 
             return
         }
-
 
         this.preview.showRegion(
             region,
@@ -958,18 +949,19 @@ export class GeographyController {
         this.geographyLocked =
             true
 
+        this.editorBridge
+            ?.setMapRendererGeographyLocked(
+                true
+            )
 
         this.timelineController
             .initializeIfNeeded()
 
-
         this.clearTerritoryPreview()
-
 
         const tool =
             this.editorBridge
                 ?.getCurrentTool()
-
 
         if (
             tool === 'pencil' ||
@@ -983,13 +975,10 @@ export class GeographyController {
             )
         }
 
-
         this.updateLockUI()
-
 
         this.editorBridge
             ?.updateProjectDirtyState()
-
 
         this.ui.statusMessage.textContent =
             'Geografía finalizada'
@@ -1001,6 +990,10 @@ export class GeographyController {
         this.geographyLocked =
             false
 
+        this.editorBridge
+            ?.setMapRendererGeographyLocked(
+                false
+            )
 
         if (
             this.timelineController
@@ -1015,13 +1008,10 @@ export class GeographyController {
             )
         }
 
-
         this.updateLockUI()
-
 
         this.editorBridge
             ?.updateProjectDirtyState()
-
 
         this.ui.statusMessage.textContent =
             'Geografía editable'
@@ -1196,6 +1186,9 @@ export class GeographyController {
         this.clearTerritorySelection()
 
         this.updateLockUI()
+
+        this.editorBridge
+            ?.refreshMapRenderer()
     }
 
 
@@ -1210,13 +1203,11 @@ export class GeographyController {
         const territoryId =
             this.splittingTerritoryId
 
-
         if (
             territoryId === null
         ) {
             return
         }
-
 
         const result =
             this.territoryManager.split(
@@ -1270,7 +1261,6 @@ export class GeographyController {
             return
         }
 
-
         // --------------------------------
         // HISTORIA DEL TERRITORIO NUEVO
         // --------------------------------
@@ -1278,7 +1268,6 @@ export class GeographyController {
         const historicalSplit =
             this.timelineController
                 .isInitialized
-
 
         let timelineSplitEvent:
             TerritorySplitEvent | null =
@@ -1307,19 +1296,16 @@ export class GeographyController {
                         territoryId
                     )
 
-
         this.territoryControlManager.assign(
             result.newTerritoryId,
             countryId
         )
-
 
         this.editorBridge
             ?.applyTerritoryCountryColor(
                 result.newTerritoryId,
                 countryId
             )
-
 
         // --------------------------------
         // HISTORY
@@ -1345,7 +1331,6 @@ export class GeographyController {
                         ],
             })
 
-
         // --------------------------------
         // SALIR DEL MODO DIVISIÓN
         // --------------------------------
@@ -1353,14 +1338,18 @@ export class GeographyController {
         this.splittingTerritoryId =
             null
 
-
         this.clearTerritorySelection()
-
 
         this.editorBridge?.setTool(
             'select'
         )
 
+        // --------------------------------
+        // REFRESCAR RENDERER
+        // --------------------------------
+
+        this.editorBridge
+            ?.refreshMapRenderer()
 
         this.ui.statusMessage.textContent =
             `Territorio dividido: se creó Territorio ${result.newTerritoryId}`
@@ -1446,6 +1435,13 @@ export class GeographyController {
                     inherited.countryId
                 )
         }
+
+        // --------------------------------
+        // ACTUALIZAR RENDER POLÍTICO
+        // --------------------------------
+
+        this.editorBridge
+            ?.refreshMapRenderer()
 
         return result
     }

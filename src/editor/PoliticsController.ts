@@ -57,6 +57,9 @@ export type PoliticsEditorBridge = {
 
     getGeographyLocked:
         () => boolean
+
+    refreshMapRenderer:
+        () => void
 }
 
 
@@ -380,7 +383,6 @@ export class PoliticsController {
             this.selectedCountryId =
                 null
 
-
             if (
                 this.editorBridge
                     ?.getCurrentTool() ===
@@ -393,14 +395,11 @@ export class PoliticsController {
             }
         }
 
-
         this.ui.countryList
             .replaceChildren()
 
-
         const countries =
             this.countryManager.getAll()
-
 
         for (
             const country of
@@ -412,14 +411,11 @@ export class PoliticsController {
                     'button'
                 )
 
-
             item.type =
                 'button'
 
-
             item.className =
                 'country-list-item'
-
 
             if (
                 country.id ===
@@ -431,36 +427,29 @@ export class PoliticsController {
                 )
             }
 
-
             const color =
                 document.createElement(
                     'span'
                 )
 
-
             color.className =
                 'country-color'
 
-
             color.style.backgroundColor =
                 country.color
-
 
             const name =
                 document.createElement(
                     'span'
                 )
 
-
             name.textContent =
                 country.name
-
 
             item.append(
                 color,
                 name
             )
-
 
             item.addEventListener(
                 'click',
@@ -472,12 +461,10 @@ export class PoliticsController {
                 }
             )
 
-
             this.ui.countryList.append(
                 item
             )
         }
-
 
         this.refreshTerritoryCountrySelect(
             this.editorBridge
@@ -485,8 +472,10 @@ export class PoliticsController {
             ?? null
         )
 
-
         this.syncToolUI()
+
+        this.editorBridge
+            ?.refreshMapRenderer()
     }
 
 
@@ -1461,12 +1450,10 @@ export class PoliticsController {
             return
         }
 
-
         const country =
             this.countryManager.getById(
                 countryId
             )
-
 
         if (
             country === null
@@ -1474,12 +1461,10 @@ export class PoliticsController {
             return
         }
 
-
         const color =
             hexToRgb(
                 country.color
             )
-
 
         if (
             color === null
@@ -1487,11 +1472,13 @@ export class PoliticsController {
             return
         }
 
-
         this.territoryManager.setColor(
             territoryId,
             color
         )
+
+        this.editorBridge
+            ?.refreshMapRenderer()
     }
 
 
@@ -1504,7 +1491,6 @@ export class PoliticsController {
                 .getTerritoryIdsByCountryId(
                     countryId
                 )
-
 
         for (
             const territoryId of
@@ -1529,7 +1515,6 @@ export class PoliticsController {
 
         this.territoryControlManager.reset()
 
-
         for (
             const territory of
             this.territoryManager.getAll()
@@ -1541,19 +1526,16 @@ export class PoliticsController {
                 )
                 ?? null
 
-
             this.territoryControlManager.assign(
                 territory.id,
                 countryId
             )
-
 
             this.applyTerritoryCountryColor(
                 territory.id,
                 countryId
             )
         }
-
 
         this.refreshUI()
     }
@@ -1573,13 +1555,11 @@ export class PoliticsController {
             y,
         }
 
-
         if (
             this.previewTimer !== null
         ) {
             return
         }
-
 
         this.previewTimer =
             window.setTimeout(
@@ -1588,14 +1568,11 @@ export class PoliticsController {
                     this.previewTimer =
                         null
 
-
                     const position =
                         this.pendingPreviewPosition
 
-
                     this.pendingPreviewPosition =
                         null
-
 
                     if (
                         position === null ||
@@ -1610,7 +1587,6 @@ export class PoliticsController {
 
                         return
                     }
-
 
                     this.updateAssignmentPreview(
                         position.x,
@@ -1637,12 +1613,10 @@ export class PoliticsController {
             return
         }
 
-
         const country =
             this.countryManager.getById(
                 this.selectedCountryId
             )
-
 
         if (
             country === null
@@ -1653,13 +1627,11 @@ export class PoliticsController {
             return
         }
 
-
         const territory =
             this.territoryManager.getAt(
                 x,
                 y
             )
-
 
         if (
             territory === null
@@ -1670,13 +1642,11 @@ export class PoliticsController {
             return
         }
 
-
         const pixels =
             this.territoryManager
                 .getRegionPixels(
                     territory.id
                 )
-
 
         if (
             pixels === null
@@ -1687,12 +1657,10 @@ export class PoliticsController {
             return
         }
 
-
         const color =
             hexToRgb(
                 country.color
             )
-
 
         if (
             color === null
@@ -1702,7 +1670,6 @@ export class PoliticsController {
 
             return
         }
-
 
         this.preview.showRegion(
             pixels,
@@ -1722,15 +1689,12 @@ export class PoliticsController {
                 this.previewTimer
             )
 
-
             this.previewTimer =
                 null
         }
 
-
         this.pendingPreviewPosition =
             null
-
 
         this.preview.clear()
     }

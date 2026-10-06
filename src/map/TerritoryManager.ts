@@ -2380,5 +2380,24 @@ export class TerritoryManager {
 					],
 		}
 	}
+
+
+	// --------------------------------------------------
+	// RASTER PARA RENDER
+	// --------------------------------------------------
+
+	public getRasterView():
+		Uint32Array {
+
+		/*
+		* IMPORTANTE:
+		*
+		* Este array se expone solamente para
+		* lectura por sistemas de render.
+		*
+		* No debe ser modificado externamente.
+		*/
+		return this.territoryIds
+	}
 }
 
