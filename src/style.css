@@ -355,7 +355,7 @@ select {
 ------------------------------------------------ */
 
 #previewCanvas {
-    z-index: 1;
+    z-index: 2;
 
     pointer-events: none;
 }
@@ -366,7 +366,7 @@ select {
 ------------------------------------------------ */
 
 #borderCanvas {
-    z-index: 2;
+    z-index: 3;
 
     cursor: crosshair;
 }
@@ -760,17 +760,14 @@ select {
     width: 90px;
 }
 
-
 /* ------------------------------------------------
-   POLITICAL BORDER RENDERER
+   CARTOGRAPHIC RENDERER
 ------------------------------------------------ */
 
-.political-border-canvas {
-    z-index: 3;
+.cartographic-canvas {
+    z-index: 1;
 
     pointer-events: none;
 
-    image-rendering: auto;
-
-    opacity: 1;
+    image-rendering: pixelated;
 }

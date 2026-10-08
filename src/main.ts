@@ -157,6 +157,7 @@ const mapRenderer =
     new MapRenderer(
         ui.mapContainer,
         ui.borderCanvas,
+        ui.territoryCanvas,
         territoryManager
     )
 

@@ -946,13 +946,9 @@ export class GeographyController {
 
     private lockGeography() {
 
-        this.geographyLocked =
+        this.setLockedState(
             true
-
-        this.editorBridge
-            ?.setMapRendererGeographyLocked(
-                true
-            )
+        )
 
         this.timelineController
             .initializeIfNeeded()
@@ -987,13 +983,9 @@ export class GeographyController {
 
     private unlockGeography() {
 
-        this.geographyLocked =
+        this.setLockedState(
             false
-
-        this.editorBridge
-            ?.setMapRendererGeographyLocked(
-                false
-            )
+        )
 
         if (
             this.timelineController
@@ -1173,19 +1165,21 @@ export class GeographyController {
 
     public reset() {
 
-        this.geographyLocked =
-            false
-
-
         this.selectedTerritoryIdValue =
             null
-
 
         this.clearTerritoryPreview()
 
         this.clearTerritorySelection()
 
-        this.updateLockUI()
+        /*
+        * Además de poner geographyLocked
+        * en false, sincroniza el MapRenderer
+        * y la UI.
+        */
+        this.setLockedState(
+            false
+        )
 
         this.editorBridge
             ?.refreshMapRenderer()

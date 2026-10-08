@@ -645,6 +645,15 @@ export class EditorHistoryController {
                 }
             }
 
+            if (
+                this.timelineController
+                    .isInitialized
+            ) {
+
+                this.timelineController
+                    .refreshCurrentDate()
+            }
+
             // --------------------------------
             // REFRESCAR UI
             // --------------------------------

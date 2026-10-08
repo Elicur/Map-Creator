@@ -609,4 +609,20 @@ export class TimelineController {
 
         this.applyCurrentDate()
     }
+
+
+    // --------------------------------------------------
+    // REAPLICAR FECHA ACTUAL
+    // --------------------------------------------------
+
+    public refreshCurrentDate() {
+
+        if (
+            !this.initialized
+        ) {
+            return
+        }
+
+        this.applyCurrentDate()
+    }
 }
