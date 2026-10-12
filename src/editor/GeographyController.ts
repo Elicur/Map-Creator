@@ -1025,7 +1025,7 @@ export class GeographyController {
         this.ui.territoryButton.disabled =
             locked
 
-        this.ui.brushSizeInput.disabled =
+        this.ui.eraserSizeSelect.disabled =
             locked
 
         this.ui.clearButton.disabled =

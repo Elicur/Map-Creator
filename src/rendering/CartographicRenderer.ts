@@ -16,27 +16,27 @@ export type TerritoryOwnerResolver =
 
 export class CartographicRenderer {
 
-    private borderCanvas:
-        HTMLCanvasElement
+    private borderCanvas: HTMLCanvasElement
 
-    private territoryCanvas:
-        HTMLCanvasElement
+    private territoryCanvas: HTMLCanvasElement
 
-    private territoryManager:
-        TerritoryManager
+    private territoryManager: TerritoryManager
 
+    private canvas: HTMLCanvasElement
 
-    private canvas:
-        HTMLCanvasElement
-
-    private context:
-        CanvasRenderingContext2D
-
+    private context: CanvasRenderingContext2D
 
     private ownerResolver:
-        TerritoryOwnerResolver | null =
-        null
+        TerritoryOwnerResolver | null = null
 
+    private internalBorderWidth = 1
+
+    private countryBorderWidth = 2
+
+    private outerBorderWidth = 3
+
+    private cachedDisplayRaster:
+        Uint32Array | null = null
 
     constructor(
         mapContainer: HTMLElement,
@@ -144,14 +144,12 @@ export class CartographicRenderer {
         const ownerResolver =
             this.ownerResolver
 
-
         if (
             ownerResolver ===
             null
         ) {
             return
         }
-
 
         const borderContext =
             this.borderCanvas
@@ -163,7 +161,6 @@ export class CartographicRenderer {
                     }
                 )
 
-
         const territoryContext =
             this.territoryCanvas
                 .getContext(
@@ -174,7 +171,6 @@ export class CartographicRenderer {
                     }
                 )
 
-
         if (
             borderContext ===
                 null ||
@@ -184,16 +180,6 @@ export class CartographicRenderer {
             return
         }
 
-
-        const borderImage =
-            borderContext.getImageData(
-                0,
-                0,
-                MAP_WIDTH,
-                MAP_HEIGHT
-            )
-
-
         const territoryImage =
             territoryContext.getImageData(
                 0,
@@ -202,30 +188,12 @@ export class CartographicRenderer {
                 MAP_HEIGHT
             )
 
+        const displayRaster =
+            this.getDisplayRaster()
 
         const territoryRaster =
             this.territoryManager
                 .getRasterView()
-
-
-        /*
-         * Raster exclusivamente visual.
-         *
-         * Copiamos el lógico pero después
-         * rellenamos sobre él los píxeles
-         * ocupados por borderCanvas.
-         */
-        const displayRaster =
-            this.buildDisplayRaster(
-                territoryRaster,
-                borderImage.data
-            )
-
-        this.smoothDisplayRaster(
-            displayRaster,
-            territoryRaster,
-            2
-        )
 
         /*
          * Partimos de los colores que ya
@@ -237,11 +205,9 @@ export class CartographicRenderer {
                 MAP_HEIGHT
             )
 
-
         output.data.set(
             territoryImage.data
         )
-
 
         /*
          * Averiguamos el color actual de
@@ -255,7 +221,6 @@ export class CartographicRenderer {
                 territoryRaster,
                 territoryImage.data
             )
-
 
         /*
          * El borderCanvas original generaba
@@ -273,7 +238,6 @@ export class CartographicRenderer {
             output.data
         )
 
-
         /*
          * Ahora que los territorios visuales
          * se tocan podemos generar las
@@ -285,12 +249,10 @@ export class CartographicRenderer {
                 ownerResolver
             )
 
-
         this.applyBorders(
             borderLevels,
             output.data
         )
-
 
         this.context.putImageData(
             output,
@@ -865,7 +827,6 @@ export class CartographicRenderer {
                 ]
             >()
 
-
         for (
             let index = 0;
             index <
@@ -878,7 +839,6 @@ export class CartographicRenderer {
                     index
                 ]
 
-
             if (
                 territoryId === 0 ||
                 colors.has(
@@ -888,11 +848,9 @@ export class CartographicRenderer {
                 continue
             }
 
-
             const pixelIndex =
                 index *
                 4
-
 
             colors.set(
                 territoryId,
@@ -915,7 +873,6 @@ export class CartographicRenderer {
                 ]
             )
         }
-
 
         return colors
     }
@@ -963,12 +920,10 @@ export class CartographicRenderer {
                 continue
             }
 
-
             const territoryId =
                 displayRaster[
                     index
                 ]
-
 
             if (
                 territoryId ===
@@ -977,12 +932,10 @@ export class CartographicRenderer {
                 continue
             }
 
-
             const color =
                 colors.get(
                     territoryId
                 )
-
 
             if (
                 color ===
@@ -991,11 +944,9 @@ export class CartographicRenderer {
                 continue
             }
 
-
             const pixelIndex =
                 index *
                 4
-
 
             pixels[
                 pixelIndex
@@ -1043,13 +994,11 @@ export class CartographicRenderer {
                 MAP_HEIGHT
             )
 
-
         const ownerCache =
             new Map<
                 number,
                 number | null
             >()
-
 
         const getOwner =
             (
@@ -1067,22 +1016,18 @@ export class CartographicRenderer {
                     )!
                 }
 
-
                 const owner =
                     ownerResolver(
                         territoryId
                     )
-
 
                 ownerCache.set(
                     territoryId,
                     owner
                 )
 
-
                 return owner
             }
-
 
         const getBorderLevel =
             (
@@ -1096,7 +1041,6 @@ export class CartographicRenderer {
                     return 0
                 }
 
-
                 /*
                  * Territorio / vacío.
                  */
@@ -1106,7 +1050,6 @@ export class CartographicRenderer {
                 ) {
                     return 3
                 }
-
 
                 /*
                  * Dos territorios.
@@ -1122,7 +1065,6 @@ export class CartographicRenderer {
                     ? 1
                     : 2
             }
-
 
         const raiseLevel =
             (
@@ -1140,12 +1082,10 @@ export class CartographicRenderer {
                     return
                 }
 
-
                 const index =
                     y *
                     MAP_WIDTH +
                     x
-
 
                 levels[
                     index
@@ -1158,6 +1098,32 @@ export class CartographicRenderer {
                     )
             }
 
+        const getWidthForLevel =
+            (
+                level: number
+            ) => {
+
+                if (
+                    level === 1
+                ) {
+
+                    return this
+                        .internalBorderWidth
+                }
+
+
+                if (
+                    level === 2
+                ) {
+
+                    return this
+                        .countryBorderWidth
+                }
+
+
+                return this
+                    .outerBorderWidth
+            }
 
         const drawVerticalBorder =
             (
@@ -1166,66 +1132,45 @@ export class CartographicRenderer {
                 level: number
             ) => {
 
-                if (
-                    level === 1
-                ) {
-
-                    /*
-                     * 1 px
-                     */
-                    raiseLevel(
-                        x,
-                        y,
-                        1
+                const width =
+                    getWidthForLevel(
+                        level
                     )
-
-                    return
-                }
-
-
-                if (
-                    level === 2
-                ) {
-
-                    /*
-                     * 2 px
-                     */
-                    raiseLevel(
-                        x,
-                        y,
-                        2
-                    )
-
-                    raiseLevel(
-                        x + 1,
-                        y,
-                        2
-                    )
-
-                    return
-                }
-
 
                 /*
-                 * 3 px
-                 */
-                raiseLevel(
-                    x - 1,
-                    y,
-                    3
-                )
+                * Centramos el grosor alrededor
+                * de la frontera original.
+                *
+                * Ejemplos:
+                *
+                * width 1 -> x
+                * width 2 -> x, x+1
+                * width 3 -> x-1, x, x+1
+                * width 4 -> x-1, x, x+1, x+2
+                */
+                const startOffset =
+                    -Math.floor(
+                        (
+                            width -
+                            1
+                        ) /
+                        2
+                    )
 
-                raiseLevel(
-                    x,
-                    y,
-                    3
-                )
+                for (
+                    let i = 0;
+                    i < width;
+                    i++
+                ) {
 
-                raiseLevel(
-                    x + 1,
-                    y,
-                    3
-                )
+                    raiseLevel(
+                        x +
+                            startOffset +
+                            i,
+                        y,
+                        level
+                    )
+                }
             }
 
 
@@ -1236,59 +1181,35 @@ export class CartographicRenderer {
                 level: number
             ) => {
 
-                if (
-                    level === 1
+                const width =
+                    getWidthForLevel(
+                        level
+                    )
+
+                const startOffset =
+                    -Math.floor(
+                        (
+                            width -
+                            1
+                        ) /
+                        2
+                    )
+
+                for (
+                    let i = 0;
+                    i < width;
+                    i++
                 ) {
 
                     raiseLevel(
                         x,
-                        y,
-                        1
+                        y +
+                            startOffset +
+                            i,
+                        level
                     )
-
-                    return
                 }
-
-
-                if (
-                    level === 2
-                ) {
-
-                    raiseLevel(
-                        x,
-                        y,
-                        2
-                    )
-
-                    raiseLevel(
-                        x,
-                        y + 1,
-                        2
-                    )
-
-                    return
-                }
-
-
-                raiseLevel(
-                    x,
-                    y - 1,
-                    3
-                )
-
-                raiseLevel(
-                    x,
-                    y,
-                    3
-                )
-
-                raiseLevel(
-                    x,
-                    y + 1,
-                    3
-                )
             }
-
 
         // --------------------------------
         // COMPARAR PIXELES VECINOS
@@ -1311,12 +1232,10 @@ export class CartographicRenderer {
                     MAP_WIDTH +
                     x
 
-
                 const territoryId =
                     raster[
                         index
                     ]
-
 
                 // ------------------------
                 // VECINO DERECHO
@@ -1332,13 +1251,11 @@ export class CartographicRenderer {
                             index + 1
                         ]
 
-
                     const level =
                         getBorderLevel(
                             territoryId,
                             rightId
                         )
-
 
                     if (
                         level > 0
@@ -1351,7 +1268,6 @@ export class CartographicRenderer {
                         )
                     }
                 }
-
 
                 // ------------------------
                 // VECINO INFERIOR
@@ -1368,13 +1284,11 @@ export class CartographicRenderer {
                             MAP_WIDTH
                         ]
 
-
                     const level =
                         getBorderLevel(
                             territoryId,
                             bottomId
                         )
-
 
                     if (
                         level > 0
@@ -1389,7 +1303,6 @@ export class CartographicRenderer {
                 }
             }
         }
-
 
         return levels
     }
@@ -1422,11 +1335,9 @@ export class CartographicRenderer {
                 continue
             }
 
-
             const pixelIndex =
                 index *
                 4
-
 
             /*
              * Casi negro.
@@ -1454,5 +1365,186 @@ export class CartographicRenderer {
             ] =
                 255
         }
+    }
+
+
+    // --------------------------------------------------
+    // ZOOM
+    // --------------------------------------------------
+
+    public setZoom(
+        zoom: number
+    ): boolean {
+
+        const safeZoom =
+            Math.max(
+                0.01,
+                zoom
+            )
+
+        /*
+        * Queremos aproximadamente:
+        *
+        * interno  -> 1 px de pantalla
+        * país     -> 2 px de pantalla
+        * exterior -> 3 px de pantalla
+        *
+        * Como todo el mapa después se escala
+        * mediante CSS, compensamos el zoom.
+        */
+        const nextInternalWidth =
+            Math.max(
+                1,
+                Math.round(
+                    1 /
+                    safeZoom
+                )
+            )
+
+        const nextCountryWidth =
+            Math.max(
+                1,
+                Math.round(
+                    2 /
+                    safeZoom
+                )
+            )
+
+        const nextOuterWidth =
+            Math.max(
+                1,
+                Math.round(
+                    3 /
+                    safeZoom
+                )
+            )
+
+        /*
+        * CameraController puede llamar esto
+        * muchas veces durante una animación.
+        *
+        * Si el perfil raster no cambió,
+        * no necesitamos reconstruir el mapa.
+        */
+        if (
+            nextInternalWidth ===
+                this.internalBorderWidth &&
+            nextCountryWidth ===
+                this.countryBorderWidth &&
+            nextOuterWidth ===
+                this.outerBorderWidth
+        ) {
+
+            return false
+        }
+
+        this.internalBorderWidth =
+            nextInternalWidth
+
+        this.countryBorderWidth =
+            nextCountryWidth
+
+        this.outerBorderWidth =
+            nextOuterWidth
+
+
+        return true
+    }
+
+
+    // --------------------------------------------------
+    // INVALIDAR CACHE DE GEOGRAFÍA
+    // --------------------------------------------------
+
+    public invalidateGeometryCache() {
+
+        this.cachedDisplayRaster =
+            null
+    }
+
+
+    // --------------------------------------------------
+    // OBTENER RASTER VISUAL
+    // --------------------------------------------------
+
+    private getDisplayRaster():
+        Uint32Array {
+
+        /*
+        * Mientras la geografía no cambie,
+        * reutilizamos exactamente el mismo
+        * raster visual.
+        */
+        if (
+            this.cachedDisplayRaster !==
+            null
+        ) {
+
+            return this.cachedDisplayRaster
+        }
+
+        const borderContext =
+            this.borderCanvas
+                .getContext(
+                    '2d'
+                )
+
+        if (
+            borderContext ===
+            null
+        ) {
+
+            throw new Error(
+                'No se pudo obtener el contexto del borderCanvas'
+            )
+        }
+
+        const borderImage =
+            borderContext
+                .getImageData(
+                    0,
+                    0,
+                    MAP_WIDTH,
+                    MAP_HEIGHT
+                )
+
+        const territoryRaster =
+            this.territoryManager
+                .getRasterView()
+
+        /*
+        * Esta es una de las partes caras.
+        *
+        * Rellenamos visualmente los píxeles
+        * que pertenecían a la frontera
+        * dibujada.
+        */
+        const displayRaster =
+            this.buildDisplayRaster(
+                territoryRaster,
+                borderImage.data
+            )
+
+        /*
+        * Esta es la otra operación cara.
+        *
+        * Eliminamos artefactos de las zonas
+        * rellenadas.
+        */
+        this.smoothDisplayRaster(
+            displayRaster,
+            territoryRaster,
+            2
+        )
+
+        /*
+        * A partir de ahora este raster puede
+        * reutilizarse hasta que cambie la
+        * geografía.
+        */
+        this.cachedDisplayRaster =
+            displayRaster
+
+        return displayRaster
     }
 }

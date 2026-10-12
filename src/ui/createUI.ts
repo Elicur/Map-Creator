@@ -21,8 +21,9 @@ export type EditorUI = {
     clearButton: HTMLButtonElement
     resetViewButton: HTMLButtonElement
 
-    brushSizeInput: HTMLInputElement
-    brushSizeValue: HTMLSpanElement
+    eraserSizeControl: HTMLLabelElement
+    eraserSizeSelect: HTMLSelectElement
+    eraserCursor: HTMLDivElement
 
     zoomValue: HTMLSpanElement
     statusMessage: HTMLSpanElement
@@ -133,20 +134,33 @@ export function createUI(): EditorUI {
 
                     <div class="toolbar-group">
 
-                        <label class="brush-control">
-                            Grosor
+                        <label
+                            id="eraserSizeControl"
+                            class="hidden"
+                        >
+                            Tamaño goma
 
-                            <input
-                                id="brushSize"
-                                type="range"
-                                min="1"
-                                max="30"
-                                value="3"
-                            />
+                            <select id="eraserSize">
+                                <option value="2">
+                                    Muy Pequeña
+                                </option>    
 
-                            <span id="brushSizeValue">
-                                3
-                            </span>
+                                <option value="15">
+                                    Pequeña
+                                </option>
+
+                                <option value="30" selected>
+                                    Mediana
+                                </option>
+
+                                <option value="70">
+                                    Grande
+                                </option>
+
+                                <option value="120">
+                                    Muy grande
+                                </option>
+                            </select>
                         </label>
 
                     </div>
@@ -327,6 +341,11 @@ export function createUI(): EditorUI {
                         width="${MAP_WIDTH}"
                         height="${MAP_HEIGHT}"
                     ></canvas>
+
+                    <div
+                        id="eraserCursor"
+                        class="eraser-cursor hidden"
+                    ></div>
 
                 </div>
 
@@ -650,14 +669,19 @@ export function createUI(): EditorUI {
                 '#resetViewButton'
             ),
 
-        brushSizeInput:
-            getElement<HTMLInputElement>(
-                '#brushSize'
+        eraserSizeControl:
+            getElement<HTMLLabelElement>(
+                '#eraserSizeControl'
             ),
 
-        brushSizeValue:
-            getElement<HTMLSpanElement>(
-                '#brushSizeValue'
+        eraserSizeSelect:
+            getElement<HTMLSelectElement>(
+                '#eraserSize'
+            ),
+
+        eraserCursor:
+            getElement<HTMLDivElement>(
+                '#eraserCursor'
             ),
 
         zoomValue:

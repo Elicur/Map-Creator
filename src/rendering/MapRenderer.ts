@@ -32,6 +32,10 @@ export class MapRenderer {
         number | null =
         null
 
+    private zoomRefreshTimer:
+        number | null =
+        null
+
 
     constructor(
         mapContainer: HTMLElement,
@@ -93,24 +97,33 @@ export class MapRenderer {
         locked: boolean
     ) {
 
+        if (
+            this.zoomRefreshTimer !==
+            null
+        ) {
+
+            window.clearTimeout(
+                this.zoomRefreshTimer
+            )
+
+            this.zoomRefreshTimer =
+                null
+        }
+
         this.geographyLocked =
             locked
 
-
         /*
-         * Aplicamos siempre el estado visual.
-         *
-         * No hacemos:
-         *
-         * if (this.geographyLocked === locked)
-         *     return
-         *
-         * porque también queremos poder
-         * resincronizar las capas aunque el
-         * valor lógico no haya cambiado.
-         */
-        this.applyVisibilityState()
+        * Cada cambio de modo invalida
+        * cualquier cache geográfico anterior.
+        *
+        * Es barato: solamente ponemos
+        * la referencia en null.
+        */
+        this.cartographicRenderer
+            .invalidateGeometryCache()
 
+        this.applyVisibilityState()
 
         if (
             locked
@@ -197,21 +210,71 @@ export class MapRenderer {
     // --------------------------------------------------
 
     public setZoom(
-        _zoom: number
+        zoom: number
     ) {
 
+        const borderProfileChanged =
+            this.cartographicRenderer
+                .setZoom(
+                    zoom
+                )
+
+        if (
+            !borderProfileChanged
+        ) {
+            return
+        }
+
         /*
-         * Por ahora el renderer cartográfico
-         * trabaja con píxeles del mapa.
-         *
-         * Más adelante este método será el
-         * punto donde implementemos:
-         *
-         * - LOD
-         * - grosores en screen-space
-         * - labels según zoom
-         * - simplificación visual
-         */
+        * Guardamos igualmente los nuevos
+        * grosores dentro del renderer,
+        * pero mientras editamos geografía
+        * no necesitamos renderizar nada.
+        */
+        if (
+            !this.geographyLocked
+        ) {
+            return
+        }
+
+        this.scheduleZoomRefresh()
+    }
+
+
+    // --------------------------------------------------
+    // REFRESH DESPUÉS DEL ZOOM
+    // --------------------------------------------------
+
+    private scheduleZoomRefresh() {
+
+        if (
+            this.zoomRefreshTimer !==
+            null
+        ) {
+
+            window.clearTimeout(
+                this.zoomRefreshTimer
+            )
+        }
+
+        /*
+        * Mientras el usuario hace zoom dejamos que
+        * CameraController escale el mapa existente.
+        *
+        * Cuando el zoom se estabiliza, reconstruimos
+        * una sola vez los grosores cartográficos.
+        */
+        this.zoomRefreshTimer =
+            window.setTimeout(
+                () => {
+
+                    this.zoomRefreshTimer =
+                        null
+
+                    this.requestRefresh()
+                },
+                120
+            )
     }
 
 

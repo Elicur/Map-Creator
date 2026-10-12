@@ -51,6 +51,8 @@ import {
     MapRenderer,
 } from '../rendering/MapRenderer'
 
+const BORDER_STROKE_WIDTH = 3
+
 export class InputController {
 
     private ui: EditorUI
@@ -295,11 +297,6 @@ export class InputController {
         // TOOLBAR
         // -----------------------------
 
-        this.ui.brushSizeInput.addEventListener(
-            'input',
-            this.handleBrushSizeInput
-        )
-
         this.ui.resetViewButton.addEventListener(
             'click',
             this.handleResetViewClick
@@ -429,10 +426,6 @@ export class InputController {
         // -----------------------------
         // TOOLBAR
         // -----------------------------
-        this.ui.brushSizeInput.removeEventListener(
-            'input',
-            this.handleBrushSizeInput
-        )        
 
         this.ui.resetViewButton.removeEventListener(
             'click',
@@ -559,6 +552,19 @@ export class InputController {
         this.currentTool =
             tool
 
+        this.ui.eraserSizeControl
+            .classList.toggle(
+                'hidden',
+                tool !== 'eraser'
+            )
+
+        if (
+            tool !== 'eraser'
+        ) {
+
+            this.hideEraserCursor()
+        }
+
         // --------------------------------
         // BOTONES
         // --------------------------------
@@ -590,6 +596,12 @@ export class InputController {
         // --------------------------------
         // WORKSPACE
         // --------------------------------
+
+        this.ui.workspace
+            .classList.toggle(
+                'eraser-mode',
+                tool === 'eraser'
+            )
 
         this.ui.workspace
             .classList.toggle(
@@ -740,18 +752,7 @@ export class InputController {
 
             this.geographyController.clearTerritoryPreview()
             this.politicsController.clearAssignmentPreview()
-        }
-
-
-    // --------------------------------------------------
-    // GROSOR
-    // --------------------------------------------------
-
-    private handleBrushSizeInput =
-        () => {
-
-            this.ui.brushSizeValue.textContent =
-                this.ui.brushSizeInput.value
+            this.hideEraserCursor()
         }
 
 
@@ -912,17 +913,12 @@ export class InputController {
                     'divide-territory'
             ) {
 
-                const brushSize =
-                    Number(
-                        this.ui.brushSizeInput.value
-                    )
-
                 const started =
                     this.geographyController
                         .startTerritorySplitStroke(
                             position.x,
                             position.y,
-                            brushSize
+                            BORDER_STROKE_WIDTH
                         )
 
                 if (
@@ -948,22 +944,17 @@ export class InputController {
             // DIBUJAR
             // -----------------------------
 
-            const brushSize =
-                Number(
-                    this.ui.brushSizeInput.value
-                )
-
-
-            /*
-             * Como territory y select ya
-             * terminaron con return, TypeScript
-             * sabe que aquí solo queda:
-             *
-             * pencil | eraser
-             */
             const drawingTool: DrawingTool =
                 this.currentTool
-
+            
+            const brushSize =
+                drawingTool === 'pencil'
+                    ? BORDER_STROKE_WIDTH
+                    : Number(
+                        this.ui
+                            .eraserSizeSelect
+                            .value
+                    )
 
             this.drawing.startStroke(
                 position.x,
@@ -1007,6 +998,32 @@ export class InputController {
                     event
                 )
 
+            //-----------------------------
+            // ERASER CURSOR
+            //-----------------------------
+            if (
+                this.currentTool ===
+                'eraser'
+            ) {
+
+                if (
+                    this.camera.isInsideMap(
+                        position.x,
+                        position.y
+                    )
+                ) {
+
+                    this.updateEraserCursor(
+                        position.x,
+                        position.y
+                    )
+                }
+
+                else {
+
+                    this.hideEraserCursor()
+                }
+            }
 
             // -----------------------------
             // PREVIEW DE TERRITORIO
@@ -1382,5 +1399,57 @@ export class InputController {
         this.politicsController.resetSelection()
 
         this.camera.resetView()
+    }
+
+
+    // --------------------------------------------------
+    // PREVIEW DEL BORRADOR
+    // --------------------------------------------------
+
+    private updateEraserCursor(
+        x: number,
+        y: number
+    ) {
+
+        if (
+            this.currentTool !==
+            'eraser'
+        ) {
+
+            this.hideEraserCursor()
+            return
+        }
+
+        const size =
+            Number(
+                this.ui
+                    .eraserSizeSelect
+                    .value
+            )
+
+        this.ui.eraserCursor.style.width =
+            `${size}px`
+
+        this.ui.eraserCursor.style.height =
+            `${size}px`
+
+        this.ui.eraserCursor.style.left =
+            `${x}px`
+
+        this.ui.eraserCursor.style.top =
+            `${y}px`
+
+        this.ui.eraserCursor
+            .classList.remove(
+                'hidden'
+            )
+    }
+
+    private hideEraserCursor() {
+
+        this.ui.eraserCursor
+            .classList.add(
+                'hidden'
+            )
     }
 }
