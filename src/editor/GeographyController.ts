@@ -49,6 +49,9 @@ export type GeographyEditorBridge = {
             command: HistoryCommand
         ) => void
 
+    resetHistoryBaseToCurrent:
+        () => void
+
     updateProjectDirtyState:
         () => void
 
@@ -707,6 +710,17 @@ export class GeographyController {
                 return
             }
 
+            if (
+                this.timelineController
+                    .isInitialized
+            ) {
+
+                this.ui.statusMessage.textContent =
+                    'No se pueden eliminar territorios después de iniciar el timeline.'
+
+                return
+            }
+
             const territory =
                 this.territoryManager.getById(
                     this.selectedTerritoryId
@@ -772,33 +786,52 @@ export class GeographyController {
     private handleClearClick =
         () => {
 
+            const shouldClear =
+                window.confirm(
+                    '¿Limpiar el mapa?\n\n' +
+                    'Se eliminarán todos los territorios y el historial temporal. No se podrá volver atrás.\n' +
+                    'Los países creados se conservarán.'
+                )
+
             if (
-                this.geographyLocked
+                !shouldClear
             ) {
-
-                this.ui.statusMessage.textContent =
-                    'La geografía está finalizada'
-
                 return
             }
-
-            this.editorBridge
-                ?.commitHistory({
-                    type:
-                        'clear',
-                })
 
             this.drawing.clear()
 
             /*
-             * No reseteamos el contador histórico
-             * de IDs.
-             */
+            * Conservamos el contador histórico
+            * de IDs porque seguimos dentro
+            * del mismo proyecto.
+            */
             this.territoryManager.reset(
                 false
             )
 
+            /*
+            * Ya no existen territorios, por lo
+            * que tampoco pueden existir
+            * asignaciones políticas.
+            */
             this.territoryControlManager.reset()
+
+            /*
+            * Clear Map inicia una geografía
+            * nueva, por lo que la historia
+            * temporal anterior deja de tener
+            * sentido.
+            */
+            this.timelineController.reset()
+
+            /*
+            * Volvemos al modo de construcción
+            * de geografía.
+            */
+            this.setLockedState(
+                false
+            )
 
             this.clearTerritorySelection()
 
@@ -810,8 +843,11 @@ export class GeographyController {
             this.editorBridge
                 ?.refreshMapRenderer()
 
+            this.editorBridge
+                ?.resetHistoryBaseToCurrent()
+
             this.ui.statusMessage.textContent =
-                'Mapa limpiado'
+                'Mapa limpiado. Países conservados.'
         }
 
 
@@ -1028,8 +1064,8 @@ export class GeographyController {
         this.ui.eraserSizeSelect.disabled =
             locked
 
-        this.ui.clearButton.disabled =
-            locked
+        /* this.ui.clearButton.disabled =
+            locked */
 
         this.ui.territoryDeleteButton.disabled =
             locked
@@ -1475,6 +1511,32 @@ export class GeographyController {
 
             return
         }
+
+            // --------------------------------
+            // MERGE HISTÓRICO NO PERMITIDO
+            // --------------------------------
+
+            if (
+                this.timelineController
+                    .isInitialized &&
+                result.deletedTerritoryIds.length >
+                    0
+            ) {
+
+                /*
+                * El stroke todavía no fue agregado
+                * al historial, por lo que reconstruir
+                * el historial restaura el estado
+                * anterior completo.
+                */
+                await this.editorBridge
+                    ?.redrawHistory()
+
+                this.ui.statusMessage.textContent =
+                    'No se pueden fusionar territorios después de iniciar el timeline.'
+
+                return
+            }
 
         // --------------------------------
         const timelineSplitEvents:

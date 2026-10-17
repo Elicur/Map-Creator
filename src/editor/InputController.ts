@@ -195,6 +195,13 @@ export class InputController {
                         )
                     },
 
+                resetHistoryBaseToCurrent:
+                    () => {
+
+                        this.projectController
+                            .resetHistoryBaseToCurrent()
+                    },
+
                 updateProjectDirtyState:
                     () => {
 

@@ -1298,4 +1298,51 @@ export class ProjectController {
                 'No se pudo restaurar el último mapa'
         }
     }
+
+
+    // --------------------------------------------------
+    // RESTAURAR BASE DE HISTORIAL A LA FECHA ACTUAL
+    // --------------------------------------------------
+    public resetHistoryBaseToCurrent() {
+
+        const geographyLocked =
+            this.editorBridge
+                ?.getGeographyLocked()
+            ?? false
+
+        const projectName =
+            this.getProjectName()
+
+        const timeline =
+            this.timelineController
+                .exportProjectState()
+
+        /*
+        * El estado actual pasa a ser la nueva
+        * base desde la que se reconstruirá
+        * Undo/Redo.
+        */
+        this.historyBaseProjectJson =
+            this.projectManager
+                .exportToJson(
+                    geographyLocked,
+                    projectName,
+                    timeline
+                )
+
+        /*
+        * Clear Map es un corte destructivo:
+        * no se puede volver mediante Undo
+        * al mapa anterior.
+        */
+        this.historyManager.reset()
+
+        /*
+        * No marcamos este nuevo baseline como
+        * guardado. El proyecto debe seguir
+        * apareciendo modificado respecto al
+        * último guardado real.
+        */
+        this.updateDirtyState()
+    }
 }
