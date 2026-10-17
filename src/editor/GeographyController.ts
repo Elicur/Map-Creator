@@ -1354,12 +1354,18 @@ export class GeographyController {
     // RECONCILIAR TERRITORIOS CON FRONTERAS
     // --------------------------------------------------
 
-    public reconcileTerritoriesAfterBorderChange() {
+    public reconcileTerritoriesAfterBorderChange(
+        forcedCreatedTerritories: {
+            territoryId: number
+            sourceTerritoryId: number
+        }[] = []
+    ) {
 
         const result =
             this.territoryManager
                 .reconcileWithBorders(
-                    this.drawing.getPixels()
+                    this.drawing.getPixels(),
+                    forcedCreatedTerritories
                 )
 
         if (
@@ -1510,6 +1516,17 @@ export class GeographyController {
             StrokeCommand = {
 
             ...stroke,
+
+            createdTerritories:
+                result.createdTerritories.map(
+                    created => ({
+                        territoryId:
+                            created.territoryId,
+
+                        sourceTerritoryId:
+                            created.sourceTerritoryId,
+                    })
+                ),
 
             timelineSplitEvents,
         }

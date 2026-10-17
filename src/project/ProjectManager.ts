@@ -10,7 +10,6 @@ import type {
 
 import type {
     MapProject,
-    MapProjectV2,
     TerritoryControlState,
 } from './projectTypes'
 
@@ -84,7 +83,7 @@ export class ProjectManager {
             TimelineProjectState | null
     ): string {
 
-        const project: MapProjectV2 = {
+        const project: MapProject = {
             format: 'map-creator',
             version: 2,
 
@@ -98,6 +97,10 @@ export class ProjectManager {
                 MAP_HEIGHT,
 
             geographyLocked,
+
+            nextTerritoryId:
+                this.territoryManager
+                    .getNextTerritoryId(),
 
             borderImage:
                 this.drawing.exportImage(),
@@ -186,6 +189,11 @@ export class ProjectManager {
             territoryIds
         )
 
+        this.territoryManager
+            .restoreNextTerritoryId(
+                project.nextTerritoryId
+            )
+
         // -----------------------------
         // PAÍSES
         // -----------------------------
@@ -237,9 +245,7 @@ export class ProjectManager {
                 project.name,
 
             timeline:
-                project.version === 2
-                    ? project.timeline
-                    : null,
+                project.timeline
         }
     }
 
@@ -469,7 +475,6 @@ function parseProject(
     }
 
     if (
-        project.version !== 1 &&
         project.version !== 2
     ) {
         throw new Error(
@@ -507,6 +512,19 @@ function parseProject(
     }
 
     if (
+        !Number.isInteger(
+            project.nextTerritoryId
+        ) ||
+        project.nextTerritoryId ===
+            undefined ||
+        project.nextTerritoryId < 1
+    ) {
+        throw new Error(
+            'Contador de territorios inválido'
+        )
+    }
+
+    if (
         typeof project.borderImage !==
         'string'
     ) {
@@ -534,6 +552,14 @@ function parseProject(
         )
     }
 
+    if (
+        project.timeline ===
+        undefined
+    ) {
+        throw new Error(
+            'El proyecto no contiene información de timeline'
+        )
+    }
 
     return project as MapProject
 }

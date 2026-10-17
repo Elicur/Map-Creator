@@ -1550,7 +1550,9 @@ export class TerritoryManager {
 	// --------------------------------------------------
 
 	public reconcileWithBorders(
-		borderPixels: Uint8ClampedArray
+		borderPixels: Uint8ClampedArray,
+		forcedCreatedTerritories:
+			ReconciledTerritoryCreation[] = []
 	): ReconcileTerritoriesResult {
 
 		/*
@@ -1682,7 +1684,6 @@ export class TerritoryManager {
 					componentIndex
 				]
 
-
 			for (
 				const [
 					territoryId,
@@ -1716,7 +1717,6 @@ export class TerritoryManager {
 				const overlapDifference =
 					b.overlap -
 					a.overlap
-
 
 				if (
 					overlapDifference !== 0
@@ -1770,7 +1770,6 @@ export class TerritoryManager {
 				continue
 			}
 
-
 			if (
 				claimedOldIds.has(
 					candidate.territoryId
@@ -1789,7 +1788,6 @@ export class TerritoryManager {
 			)
 		}
 
-
 		// --------------------------------
 		// CREAR IDS PARA PARTES NUEVAS
 		// --------------------------------
@@ -1803,6 +1801,17 @@ export class TerritoryManager {
 			new Array(
 				components.length
 			)
+
+		/*
+		* Durante Undo/Redo podemos recibir
+		* los IDs históricos que debe recuperar
+		* cada territorio nuevo.
+		*
+		* Este Set evita reutilizar la misma
+		* creación histórica más de una vez.
+		*/
+		const usedForcedCreationIndexes =
+			new Set<number>()
 
 		for (
 			let componentIndex = 0;
@@ -1825,6 +1834,11 @@ export class TerritoryManager {
 			] =
 				sourceTerritoryId
 
+			/*
+			* Esta región ya conservó un
+			* ID anterior, por lo que no es
+			* un territorio nuevo.
+			*/
 			if (
 				assignedIds[
 					componentIndex
@@ -1833,8 +1847,132 @@ export class TerritoryManager {
 				continue
 			}
 
-			const newTerritoryId =
-				this.nextTerritoryId++
+			// --------------------------------
+			// BUSCAR ID HISTÓRICO FORZADO
+			// --------------------------------
+
+			let forcedCreationIndex =
+				-1
+
+			for (
+				let i = 0;
+				i <
+					forcedCreatedTerritories.length;
+				i++
+			) {
+
+				if (
+					usedForcedCreationIndexes.has(
+						i
+					)
+				) {
+					continue
+				}
+
+				const forcedCreation =
+					forcedCreatedTerritories[i]
+
+				/*
+				* Vinculamos la región nueva con
+				* la creación histórica usando
+				* su territorio de origen.
+				*/
+				if (
+					forcedCreation
+						.sourceTerritoryId !==
+					sourceTerritoryId
+				) {
+					continue
+				}
+
+				forcedCreationIndex =
+					i
+
+				break
+			}
+
+			let newTerritoryId:
+				number
+
+			// --------------------------------
+			// REPLAY DE HISTORIAL
+			// --------------------------------
+
+			if (
+				forcedCreationIndex !== -1
+			) {
+
+				const forcedCreation =
+					forcedCreatedTerritories[
+						forcedCreationIndex
+					]
+
+				newTerritoryId =
+					forcedCreation.territoryId
+
+				/*
+				* Una creación histórica no debe
+				* pisar un territorio que ya
+				* existía antes de este stroke.
+				*/
+				if (
+					oldTerritories.has(
+						newTerritoryId
+					)
+				) {
+
+					throw new Error(
+						`El territorio histórico #${newTerritoryId} ya existe`
+					)
+				}
+
+				/*
+				* Tampoco puede haberse usado ya
+				* en otra región de este mismo
+				* proceso de reconciliación.
+				*/
+				if (
+					assignedIds.includes(
+						newTerritoryId
+					)
+				) {
+
+					throw new Error(
+						`El territorio histórico #${newTerritoryId} fue asignado más de una vez`
+					)
+				}
+
+				usedForcedCreationIndexes.add(
+					forcedCreationIndex
+				)
+
+				/*
+				* Restaurar un ID antiguo no debe
+				* hacer retroceder el allocator.
+				*
+				* Ejemplo:
+				*
+				* nextTerritoryId = 4
+				* restauramos #3
+				*
+				* nextTerritoryId sigue siendo 4.
+				*/
+				this.nextTerritoryId =
+					Math.max(
+						this.nextTerritoryId,
+						newTerritoryId + 1
+					)
+			}
+
+			// --------------------------------
+			// CREACIÓN NORMAL
+			// --------------------------------
+
+			else {
+
+				newTerritoryId =
+					this.nextTerritoryId++
+			}
 
 			assignedIds[
 				componentIndex
@@ -1847,6 +1985,25 @@ export class TerritoryManager {
 
 				sourceTerritoryId,
 			})
+		}
+
+		/*
+		* Si estábamos reproduciendo historial,
+		* todas las creaciones históricas
+		* deberían haber encontrado su región.
+		*
+		* Si no ocurrió, hay una inconsistencia
+		* entre la geometría y el historial.
+		*/
+		if (
+			forcedCreatedTerritories.length > 0 &&
+			usedForcedCreationIndexes.size !==
+				forcedCreatedTerritories.length
+		) {
+
+			throw new Error(
+				'No se pudieron restaurar todos los territorios creados por el trazo'
+			)
 		}
 
 		// --------------------------------
@@ -1998,7 +2155,6 @@ export class TerritoryManager {
 				)
 				??
 				NEUTRAL_TERRITORY_COLOR
-
 
 			this.paintPixelsToImageData(
 				component.pixels,
@@ -2398,6 +2554,34 @@ export class TerritoryManager {
 		* No debe ser modificado externamente.
 		*/
 		return this.territoryIds
+	}
+
+
+	public getNextTerritoryId():
+		number {
+
+		return this.nextTerritoryId
+	}
+
+
+	public restoreNextTerritoryId(
+		nextTerritoryId: number
+	) {
+
+		if (
+			!Number.isInteger(
+				nextTerritoryId
+			) ||
+			nextTerritoryId < 1
+		) {
+
+			throw new Error(
+				'nextTerritoryId inválido'
+			)
+		}
+
+		this.nextTerritoryId =
+			nextTerritoryId
 	}
 }
 

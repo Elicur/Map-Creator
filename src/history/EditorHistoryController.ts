@@ -294,6 +294,15 @@ export class EditorHistoryController {
             timelineSplitEvents
         )
 
+        if (
+            this.timelineController
+                .isInitialized
+        ) {
+
+            this.timelineController
+                .refreshCurrentDate()
+        }
+
         this.projectController
             .updateDirtyState()
 
@@ -377,7 +386,10 @@ export class EditorHistoryController {
 
                     const result =
                         this.geographyController
-                            .reconcileTerritoriesAfterBorderChange()
+                            .reconcileTerritoriesAfterBorderChange(
+                                command.createdTerritories ??
+                                []
+                            )
 
                     if (
                         result.status !==

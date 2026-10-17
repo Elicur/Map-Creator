@@ -8,9 +8,18 @@ import type {
 } from '../timeline/timelineTypes'
 
 
-type MapProjectBase = {
+export type TerritoryControlState = {
+    territoryId: number
+    countryId: number
+}
+
+
+export type MapProject = {
     format:
         'map-creator'
+
+    version:
+        2
 
     name:
         string
@@ -24,6 +33,9 @@ type MapProjectBase = {
     geographyLocked:
         boolean
 
+    nextTerritoryId:
+        number
+
     borderImage:
         string
 
@@ -36,30 +48,9 @@ type MapProjectBase = {
     countries:
         Country[]
 
-    territoryControl: 
+    territoryControl:
         TerritoryControlState[]
+
+    timeline:
+        TimelineProjectState | null
 }
-
-export type TerritoryControlState = {
-    territoryId: number
-    countryId: number
-}
-
-export type MapProjectV1 =
-    MapProjectBase & {
-        version: 1
-    }
-
-
-export type MapProjectV2 =
-    MapProjectBase & {
-        version: 2
-
-        timeline:
-            TimelineProjectState | null
-    }
-
-
-export type MapProject =
-    | MapProjectV1
-    | MapProjectV2

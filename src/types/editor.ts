@@ -34,7 +34,9 @@ export type StrokeCommand = {
 
 	points: Point[]
 
-    timelineSplitEvents?: TerritorySplitEvent[]
+    createdTerritories?: StrokeTerritoryCreation[]
+
+    timelineSplitEvents?: TerritorySplitEvent[]    
 }
 
 
@@ -130,6 +132,11 @@ export type TimelineTerritoryOwnerChangeCommand = {
 
     event:
         TerritoryOwnerChangedEvent
+}
+
+export type StrokeTerritoryCreation = {
+    territoryId: number
+    sourceTerritoryId: number
 }
 
 export type HistoryCommand =
