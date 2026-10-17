@@ -40,10 +40,6 @@ export type StrokeCommand = {
 }
 
 
-export type ClearCommand = {
-  	type: 'clear'
-}
-
 
 export type CreateTerritoryCommand = {
 	type: 'create-territory'
@@ -141,7 +137,6 @@ export type StrokeTerritoryCreation = {
 
 export type HistoryCommand =
   | StrokeCommand
-  | ClearCommand
   | CreateTerritoryCommand
   | SplitTerritoryCommand
   | RenameTerritoryCommand

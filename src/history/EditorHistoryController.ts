@@ -404,31 +404,6 @@ export class EditorHistoryController {
                     continue
                 }
 
-                // -----------------------------
-                // LIMPIAR
-                // -----------------------------
-
-                if (
-                    command.type ===
-                    'clear'
-                ) {
-
-                    this.drawing.clear()
-
-                    /*
-                     * Importante:
-                     *
-                     * Clear no vuelve el allocator
-                     * histórico de IDs a 1.
-                     */
-                    this.territoryManager.reset(
-                        false
-                    )
-
-                    this.territoryControlManager.reset()
-
-                    continue
-                }
 
                 // -----------------------------
                 // CREAR TERRITORIO
@@ -696,7 +671,6 @@ export class EditorHistoryController {
         return (
             command.type === 'stroke' ||
             command.type === 'create-territory' ||
-            command.type === 'clear' ||
             command.type === 'delete-territory' ||
             command.type === 'split-territory'
         )
@@ -810,19 +784,6 @@ export class EditorHistoryController {
                 this.ui.statusMessage.textContent =
                     `${prefix}: Territorio #${command.territoryId} pertenece a "${country.name}"`
             }
-
-            return
-        }
-
-        if (
-            command.type ===
-            'clear'
-        ) {
-
-            this.ui.statusMessage.textContent =
-                action === 'undo'
-                    ? 'Deshecho: limpiar mapa'
-                    : 'Rehecho: limpiar mapa'
 
             return
         }
