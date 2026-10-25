@@ -135,6 +135,14 @@ export type StrokeTerritoryCreation = {
     sourceTerritoryId: number
 }
 
+export type ImportBordersCommand = {
+    type:
+        'import-borders'
+
+    borderImage:
+        string
+}
+
 export type HistoryCommand =
   | StrokeCommand
   | CreateTerritoryCommand
@@ -146,3 +154,4 @@ export type HistoryCommand =
   | AssignTerritoryCountryCommand
   | DeleteTerritoryCommand
   | TimelineTerritoryOwnerChangeCommand
+  | ImportBordersCommand

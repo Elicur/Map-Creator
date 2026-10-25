@@ -10,27 +10,25 @@ import type {
 
 export class ReferenceMapController {
 
-    private readonly ui:
-        EditorUI
+    private readonly ui: EditorUI
 
-    private readonly canvas:
-        HTMLCanvasElement
+    private readonly canvas: HTMLCanvasElement
 
-    private readonly context:
-        CanvasRenderingContext2D
+    private readonly context: CanvasRenderingContext2D
 
-    private imageDataUrl:
-        string | null = null
+    private imageDataUrl: string | null = null
 
-    private opacity =
-        0.6
+    private opacity = 0.6
 
     private changeHandler:
         (() => void) | null =
         null
 
-    private editingEnabled =
-        true
+    private editingEnabled = true
+
+    private borderDetectionPreview = false
+
+    private borderThreshold = 160
 
     constructor(
         ui: EditorUI
@@ -90,7 +88,76 @@ export class ReferenceMapController {
                 'click',
                 this.handleRemoveClick
             )
+
+        this.ui.detectReferenceBordersButton
+            .addEventListener(
+                'click',
+                this.handleDetectBordersClick
+            )
+
+        this.ui.referenceThresholdInput
+            .addEventListener(
+                'input',
+                this.handleThresholdInput
+            )
+
+        this.ui.applyReferenceBordersButton
+            .addEventListener(
+                'click',
+                this.handleApplyBordersClick
+            )
     }
+
+
+    private handleApplyBordersClick =
+        async () => {
+
+            if (
+                !this.borderDetectionPreview ||
+                this.imageDataUrl ===
+                    null ||
+                this.applyBordersHandler ===
+                    null
+            ) {
+                return
+            }
+
+            /*
+            * El canvas contiene en este momento
+            * solamente la máscara detectada.
+            *
+            * La opacidad es CSS, por lo que no
+            * queda incorporada al PNG.
+            */
+            const borderImage =
+                this.canvas.toDataURL(
+                    'image/png'
+                )
+
+            const applied =
+                await this.applyBordersHandler(
+                    borderImage
+                )
+
+            if (
+                !applied
+            ) {
+                return
+            }
+
+            /*
+            * Volvemos a mostrar la referencia
+            * original después de aplicar.
+            */
+            this.borderDetectionPreview =
+                false
+
+            this.updateUI()
+
+            await this.loadImage(
+                this.imageDataUrl
+            )
+        }
 
 
     private handleReferenceMapClick =
@@ -133,6 +200,8 @@ export class ReferenceMapController {
                     await this.readFileAsDataUrl(
                         file
                     )
+
+                this.borderDetectionPreview = false
 
                 await this.loadImage(
                     dataUrl
@@ -335,6 +404,27 @@ export class ReferenceMapController {
         this.ui.removeReferenceMapButton.disabled =
             !this.editingEnabled ||
             !hasReference
+
+        this.ui.detectReferenceBordersButton.disabled =
+            !this.editingEnabled ||
+            !hasReference
+
+        this.ui.detectReferenceBordersButton.textContent =
+            this.borderDetectionPreview
+                ? 'Cancelar detección'
+                : 'Detectar fronteras'
+
+        this.ui.referenceThresholdControl
+            .classList.toggle(
+                'hidden',
+                !this.borderDetectionPreview
+            )
+
+        this.ui.applyReferenceBordersButton
+            .classList.toggle(
+                'hidden',
+                !this.borderDetectionPreview
+            )
     }
 
 
@@ -464,6 +554,8 @@ export class ReferenceMapController {
         imageDataUrl: string | null
     ) {
 
+        this.borderDetectionPreview = false
+
         this.opacity =
             0.6
 
@@ -510,8 +602,9 @@ export class ReferenceMapController {
             MAP_HEIGHT
         )
 
-        this.imageDataUrl =
-            null
+        this.imageDataUrl = null
+
+        this.borderDetectionPreview = false
 
         this.updateUI()
     }
@@ -525,5 +618,262 @@ export class ReferenceMapController {
             enabled
 
         this.updateUI()
+    }
+
+
+    // --------------------------------------------------
+    // DETECCIÓN DE FRONTERAS
+    // --------------------------------------------------
+    private handleDetectBordersClick =
+        () => {
+
+            if (
+                this.imageDataUrl ===
+                null
+            ) {
+                return
+            }
+
+            if (
+                this.borderDetectionPreview
+            ) {
+
+                this.borderDetectionPreview =
+                    false
+
+                this.updateUI()
+
+                void this.loadImage(
+                    this.imageDataUrl
+                )
+
+                return
+            }
+
+            this.borderDetectionPreview =
+                true
+
+            this.updateUI()
+
+            void this.renderBorderDetectionPreview()
+        }
+
+    
+    private handleThresholdInput =
+        () => {
+
+            this.borderThreshold =
+                Number(
+                    this.ui
+                        .referenceThresholdInput
+                        .value
+                )
+
+            this.ui.referenceThresholdValue
+                .textContent =
+                this.borderThreshold.toString()
+
+            if (
+                !this.borderDetectionPreview
+            ) {
+                return
+            }
+
+            void this.renderBorderDetectionPreview()
+        }
+
+    
+    private async renderBorderDetectionPreview() {
+
+        if (
+            this.imageDataUrl ===
+                null
+        ) {
+            return
+        }
+
+        const image =
+            await this.createImage(
+                this.imageDataUrl
+            )
+
+        const processingCanvas =
+            document.createElement(
+                'canvas'
+            )
+
+        processingCanvas.width =
+            MAP_WIDTH
+
+        processingCanvas.height =
+            MAP_HEIGHT
+
+        const processingContext =
+            processingCanvas.getContext(
+                '2d'
+            )
+
+        if (
+            processingContext ===
+            null
+        ) {
+            throw new Error(
+                'No se pudo crear el contexto de procesamiento'
+            )
+        }
+
+        const scale =
+            Math.min(
+                MAP_WIDTH /
+                    image.naturalWidth,
+
+                MAP_HEIGHT /
+                    image.naturalHeight
+            )
+
+        const drawWidth =
+            image.naturalWidth *
+            scale
+
+        const drawHeight =
+            image.naturalHeight *
+            scale
+
+        const drawX =
+            (
+                MAP_WIDTH -
+                drawWidth
+            ) / 2
+
+        const drawY =
+            (
+                MAP_HEIGHT -
+                drawHeight
+            ) / 2
+
+        processingContext.drawImage(
+            image,
+            drawX,
+            drawY,
+            drawWidth,
+            drawHeight
+        )
+
+        const imageData =
+            processingContext.getImageData(
+                0,
+                0,
+                MAP_WIDTH,
+                MAP_HEIGHT
+            )
+
+        const pixels =
+            imageData.data
+
+        for (
+            let i = 0;
+            i < pixels.length;
+            i += 4
+        ) {
+
+            const alpha =
+                pixels[i + 3]
+
+            if (
+                alpha === 0
+            ) {
+                continue
+            }
+
+            const red =
+                pixels[i]
+
+            const green =
+                pixels[i + 1]
+
+            const blue =
+                pixels[i + 2]
+
+            /*
+            * Luminancia perceptual.
+            */
+            const brightness =
+                red * 0.299 +
+                green * 0.587 +
+                blue * 0.114
+
+            const isBorder =
+                brightness <=
+                this.borderThreshold
+
+            if (
+                isBorder
+            ) {
+
+                pixels[i] =
+                    0
+
+                pixels[i + 1] =
+                    0
+
+                pixels[i + 2] =
+                    0
+
+                pixels[i + 3] =
+                    255
+
+                continue
+            }
+
+            /*
+            * Lo que no parece frontera
+            * queda transparente.
+            */
+            pixels[i] =
+                0
+
+            pixels[i + 1] =
+                0
+
+            pixels[i + 2] =
+                0
+
+            pixels[i + 3] =
+                0
+        }
+
+        this.context.clearRect(
+            0,
+            0,
+            MAP_WIDTH,
+            MAP_HEIGHT
+        )
+
+        this.context.putImageData(
+            imageData,
+            0,
+            0
+        )
+    }
+
+
+    private applyBordersHandler:
+        (
+            (
+                borderImage: string
+            ) => Promise<boolean>
+        ) | null =
+        null
+
+    
+    public setApplyBordersHandler(
+        handler:
+            (
+                borderImage: string
+            ) => Promise<boolean>
+    ) {
+
+        this.applyBordersHandler =
+            handler
     }
 }

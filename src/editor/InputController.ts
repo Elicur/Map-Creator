@@ -276,6 +276,15 @@ export class InputController {
                             )
                     },
             })
+
+        this.referenceMapController
+            .setApplyBordersHandler(
+                borderImage =>
+                    this.geographyController
+                        .applyImportedBorders(
+                            borderImage
+                        )
+            )
     }
 
 

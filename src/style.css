@@ -183,6 +183,8 @@ select {
 
 .toolbar-project-row {
     padding-top: 2px;
+
+    flex-wrap: wrap;
 }
 
 
@@ -851,3 +853,37 @@ select {
 
     text-align: right;
 }
+
+
+.reference-threshold-control {
+    display: flex;
+    align-items: center;
+
+    gap: 6px;
+
+    color: #cccccc;
+
+    font-size: 13px;
+
+    white-space: nowrap;
+}
+
+
+.reference-threshold-control input {
+    width: 100px;
+}
+
+.reference-threshold-control.hidden {
+    display: none;
+}
+
+#referenceThresholdValue {
+    min-width: 28px;
+
+    text-align: right;
+}
+
+#applyReferenceBordersButton.hidden {
+    display: none;
+}
+

@@ -65,6 +65,11 @@ export type EditorUI = {
     referenceOpacityInput: HTMLInputElement
     referenceOpacityValue: HTMLSpanElement
 
+    detectReferenceBordersButton: HTMLButtonElement
+    referenceThresholdControl: HTMLLabelElement
+    referenceThresholdInput: HTMLInputElement
+    referenceThresholdValue: HTMLSpanElement
+
     removeReferenceMapButton: HTMLButtonElement
 
     projectNameInput: HTMLInputElement
@@ -85,6 +90,8 @@ export type EditorUI = {
     timelineYearInput: HTMLInputElement
     timelineNextButton: HTMLButtonElement
     timelineBar: HTMLDivElement
+
+    applyReferenceBordersButton: HTMLButtonElement
 }
 
 
@@ -327,6 +334,44 @@ export function createUI(): EditorUI {
                             disabled
                         >
                             Quitar
+                        </button>
+
+                        <label
+                            id="referenceThresholdControl"
+                            class="reference-threshold-control hidden"
+                        >
+                            <span>
+                                Umbral
+                            </span>
+
+                            <input
+                                id="referenceThresholdInput"
+                                type="range"
+                                min="0"
+                                max="255"
+                                step="1"
+                                value="160"
+                            />
+
+                            <span id="referenceThresholdValue">
+                                160
+                            </span>
+                        </label>
+
+                        <button
+                            id="applyReferenceBordersButton"
+                            type="button"
+                            class="hidden"
+                        >
+                            Aplicar fronteras
+                        </button>
+
+                        <button
+                            id="detectReferenceBordersButton"
+                            type="button"
+                            disabled
+                        >
+                            Detectar fronteras
                         </button>
 
                     </div>
@@ -966,6 +1011,31 @@ export function createUI(): EditorUI {
         timelineBar:
             getElement<HTMLDivElement>(
                 '#timelineBar'
+            ),
+
+        detectReferenceBordersButton:
+            getElement<HTMLButtonElement>(
+                '#detectReferenceBordersButton'
+            ),
+
+        referenceThresholdControl:
+            getElement<HTMLLabelElement>(
+                '#referenceThresholdControl'
+            ),
+
+        referenceThresholdInput:
+            getElement<HTMLInputElement>(
+                '#referenceThresholdInput'
+            ),
+
+        referenceThresholdValue:
+            getElement<HTMLSpanElement>(
+                '#referenceThresholdValue'
+            ),
+
+        applyReferenceBordersButton:
+            getElement<HTMLButtonElement>(
+                '#applyReferenceBordersButton'
             ),
     }
 }

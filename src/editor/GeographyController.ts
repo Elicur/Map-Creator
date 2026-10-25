@@ -1648,4 +1648,55 @@ export class GeographyController {
         this.ui.statusMessage.textContent =
             'Frontera actualizada'
     }
+
+
+    // --------------------------------------------------
+    // APLICAR FRONTERAS IMPORTADAS
+    // --------------------------------------------------
+    public async applyImportedBorders(
+        borderImage: string
+    ): Promise<boolean> {
+
+        if (
+            this.geographyLocked
+        ) {
+
+            this.ui.statusMessage.textContent =
+                'Reabrí la geografía para importar fronteras'
+
+            return false
+        }
+
+        if (
+            this.territoryManager
+                .getAll()
+                .length > 0
+        ) {
+
+            this.ui.statusMessage.textContent =
+                'No se pueden importar fronteras sobre un mapa que ya tiene territorios'
+
+            return false
+        }
+
+        await this.drawing.importImage(
+            borderImage
+        )
+
+        this.editorBridge
+            ?.commitHistory({
+                type:
+                    'import-borders',
+
+                borderImage,
+            })
+
+        this.editorBridge
+            ?.refreshMapRenderer()
+
+        this.ui.statusMessage.textContent =
+            'Fronteras importadas correctamente'
+
+        return true
+    }
 }

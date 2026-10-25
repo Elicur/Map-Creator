@@ -446,6 +446,22 @@ export class EditorHistoryController {
                 }
 
                 // -----------------------------
+                // IMPORTAR FRONTERAS
+                // -----------------------------
+
+                if (
+                    command.type ===
+                    'import-borders'
+                ) {
+
+                    await this.drawing.importImage(
+                        command.borderImage
+                    )
+
+                    continue
+                }
+
+                // -----------------------------
                 // DIVIDIR TERRITORIO
                 // -----------------------------
 
@@ -672,7 +688,8 @@ export class EditorHistoryController {
             command.type === 'stroke' ||
             command.type === 'create-territory' ||
             command.type === 'delete-territory' ||
-            command.type === 'split-territory'
+            command.type === 'split-territory' ||
+            command.type === 'import-borders'
         )
     }
 
