@@ -8,6 +8,7 @@ export type EditorUI = {
     workspace: HTMLElement
     mapContainer: HTMLDivElement
 
+    referenceCanvas: HTMLCanvasElement
     borderCanvas: HTMLCanvasElement
     previewCanvas: HTMLCanvasElement
     territoryCanvas: HTMLCanvasElement
@@ -56,6 +57,15 @@ export type EditorUI = {
     exportMapButton: HTMLButtonElement
     importMapButton: HTMLButtonElement
     importMapInput: HTMLInputElement
+
+    referenceMapButton: HTMLButtonElement
+    referenceMapInput: HTMLInputElement
+
+    referenceOpacityControl: HTMLLabelElement
+    referenceOpacityInput: HTMLInputElement
+    referenceOpacityValue: HTMLSpanElement
+
+    removeReferenceMapButton: HTMLButtonElement
 
     projectNameInput: HTMLInputElement
 
@@ -269,6 +279,59 @@ export function createUI(): EditorUI {
                     </div>
 
 
+                    <div class="toolbar-separator"></div>
+
+
+                    <div class="toolbar-group reference-map-controls">
+
+                        <button
+                            id="referenceMapButton"
+                            type="button"
+                        >
+                            🖼️ Referencia
+                        </button>
+
+                        <input
+                            id="referenceMapInput"
+                            type="file"
+                            accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                            hidden
+                        />
+
+                        <label
+                            id="referenceOpacityControl"
+                            class="reference-opacity-control"
+                        >
+                            <span>
+                                Opacidad
+                            </span>
+
+                            <input
+                                id="referenceOpacityInput"
+                                type="range"
+                                min="0"
+                                max="100"
+                                step="1"
+                                value="60"
+                                disabled
+                            />
+
+                            <span id="referenceOpacityValue">
+                                60%
+                            </span>
+                        </label>
+
+                        <button
+                            id="removeReferenceMapButton"
+                            type="button"
+                            disabled
+                        >
+                            Quitar
+                        </button>
+
+                    </div>
+
+
                     <div class="toolbar-status">
 
                         <span
@@ -323,6 +386,12 @@ export function createUI(): EditorUI {
                     id="mapContainer"
                     class="map-container"
                 >
+
+                    <canvas
+                        id="referenceCanvas"
+                        width="${MAP_WIDTH}"
+                        height="${MAP_HEIGHT}"
+                    ></canvas>
 
                     <canvas
                         id="territoryCanvas"
@@ -609,6 +678,11 @@ export function createUI(): EditorUI {
                 '#mapContainer'
             ),
 
+        referenceCanvas:
+            getElement<HTMLCanvasElement>(
+                '#referenceCanvas'
+            ),
+
         borderCanvas:
             getElement<HTMLCanvasElement>(
                 '#borderCanvas'
@@ -792,6 +866,36 @@ export function createUI(): EditorUI {
         importMapInput:
             getElement<HTMLInputElement>(
                 '#importMapInput'
+            ),
+
+        referenceMapButton:
+            getElement<HTMLButtonElement>(
+                '#referenceMapButton'
+            ),
+
+        referenceMapInput:
+            getElement<HTMLInputElement>(
+                '#referenceMapInput'
+            ),
+
+        referenceOpacityControl:
+            getElement<HTMLLabelElement>(
+                '#referenceOpacityControl'
+            ),
+
+        referenceOpacityInput:
+            getElement<HTMLInputElement>(
+                '#referenceOpacityInput'
+            ),
+
+        referenceOpacityValue:
+            getElement<HTMLSpanElement>(
+                '#referenceOpacityValue'
+            ),
+
+        removeReferenceMapButton:
+            getElement<HTMLButtonElement>(
+                '#removeReferenceMapButton'
             ),
         
         projectNameInput:

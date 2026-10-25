@@ -351,6 +351,19 @@ select {
 
 
 /* ------------------------------------------------
+   MAPA DE REFERENCIA
+------------------------------------------------ */
+
+#referenceCanvas {
+    z-index: 1;
+
+    pointer-events: none;
+
+    opacity: 0.6;
+}
+
+
+/* ------------------------------------------------
    PREVIEW CANVAS
 ------------------------------------------------ */
 
@@ -802,4 +815,39 @@ select {
 
 .workspace.eraser-mode #borderCanvas {
     cursor: none;
+}
+
+
+/* ------------------------------------------------
+   MAPA DE REFERENCIA - CONTROLES
+------------------------------------------------ */
+
+.reference-map-controls {
+    gap: 8px;
+}
+
+
+.reference-opacity-control {
+    display: flex;
+    align-items: center;
+
+    gap: 6px;
+
+    color: #cccccc;
+
+    font-size: 13px;
+
+    white-space: nowrap;
+}
+
+
+.reference-opacity-control input {
+    width: 90px;
+}
+
+
+#referenceOpacityValue {
+    min-width: 36px;
+
+    text-align: right;
 }

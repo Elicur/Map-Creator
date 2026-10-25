@@ -72,6 +72,10 @@ import {
     MapRenderer,
 } from './rendering/MapRenderer'
 
+import {
+    ReferenceMapController,
+} from './reference/ReferenceMapController'
+
 // --------------------------------------------------
 // INTERFAZ
 // --------------------------------------------------
@@ -103,6 +107,12 @@ const preview =
         ui.previewCanvas
     )
 
+const referenceMapController =
+    new ReferenceMapController(
+        ui
+    )
+
+void referenceMapController
 
 const territoryManager =
     new TerritoryManager(
@@ -212,6 +222,7 @@ const projectController =
         localProjectStore,
         historyManager,
         timelineController,
+        referenceMapController
     )
 
 const historyController =
@@ -242,7 +253,8 @@ const input =
         politicsController,
         geographyController,
         historyController,
-        mapRenderer
+        mapRenderer,
+        referenceMapController
     )
 
 

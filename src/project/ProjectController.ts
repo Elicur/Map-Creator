@@ -22,6 +22,10 @@ import {
     TimelineController,
 } from '../timeline/TimelineController'
 
+import {
+    ReferenceMapController,
+} from '../reference/ReferenceMapController'
+
 const LAST_LOCAL_PROJECT_KEY =
     'map-creator-last-project-id'
 
@@ -73,12 +77,19 @@ export class ProjectController {
 
     private timelineController: TimelineController
 
+    private referenceMapController: ReferenceMapController
+
+    private savedReferenceImage: string | null = null
+
+    private referenceMapDirty = false
+
     constructor(
         ui: EditorUI,
         projectManager: ProjectManager,
         localProjectStore: LocalProjectStore,
         historyManager: HistoryManager,
-        timelineController: TimelineController
+        timelineController: TimelineController,
+        referenceMapController: ReferenceMapController
     ) {
 
         this.ui = ui
@@ -90,6 +101,13 @@ export class ProjectController {
         this.historyManager = historyManager
 
         this.timelineController = timelineController
+
+        this.referenceMapController = referenceMapController
+
+        this.referenceMapController
+            .setChangeHandler(
+                this.handleReferenceMapChanged
+            )
     }
 
 
@@ -301,6 +319,19 @@ export class ProjectController {
     // ESTADO DIRTY
     // --------------------------------------------------
 
+
+    private handleReferenceMapChanged =
+        () => {
+
+            this.referenceMapDirty =
+                this.referenceMapController
+                    .exportProjectState() !==
+                this.savedReferenceImage
+
+            this.updateDirtyState()
+        }
+
+
     public updateDirtyState() {
 
         const geographyLocked =
@@ -311,6 +342,8 @@ export class ProjectController {
 
         this.projectDirty =
             this.requiresLocalSave
+            ||
+            this.referenceMapDirty
             ||
             (
                 this.historyManager.stateId !==
@@ -347,7 +380,13 @@ export class ProjectController {
         this.savedProjectName =
             this.getProjectName()
 
+        this.savedReferenceImage =
+            this.referenceMapController
+                .exportProjectState()
 
+        this.referenceMapDirty =
+            false
+        
         this.projectDirty =
             false
 
@@ -442,7 +481,9 @@ export class ProjectController {
 
                             this.getProjectName(),
 
-                            this.timelineController.exportProjectState()
+                            this.timelineController.exportProjectState(),
+
+                            this.referenceMapController.exportProjectState()
                         )
 
 
@@ -570,6 +611,17 @@ export class ProjectController {
                             json
                         )
 
+                await this.referenceMapController
+                    .importProjectState(
+                        result.referenceImage
+                    )
+
+                this.savedReferenceImage =
+                    result.referenceImage
+
+                this.referenceMapDirty =
+                    false
+
 
                 this.currentLocalProjectId =
                     null
@@ -587,7 +639,8 @@ export class ProjectController {
                         .exportToJson(
                             result.geographyLocked,
                             result.name,
-                            result.timeline
+                            result.timeline,
+                            result.referenceImage
                         )
 
 
@@ -671,7 +724,9 @@ export class ProjectController {
 
                             name,
 
-                            this.timelineController.exportProjectState()
+                            this.timelineController.exportProjectState(),
+
+                            this.referenceMapController.exportProjectState()
                         )
 
                 const record =
@@ -989,12 +1044,18 @@ export class ProjectController {
                         project.json
                     )
 
+            await this.referenceMapController
+                .importProjectState(
+                    result.referenceImage
+                )
+
             this.historyBaseProjectJson =
                 this.projectManager
                     .exportToJson(
                         result.geographyLocked,
                         result.name,
-                        result.timeline
+                        result.timeline,
+                        result.referenceImage
                     )
 
             this.historyManager.reset()
@@ -1135,6 +1196,8 @@ export class ProjectController {
         this.editorBridge
             ?.resetForNewProject()
 
+        this.referenceMapController
+            .reset()
 
         this.currentLocalProjectId =
             null
@@ -1327,7 +1390,8 @@ export class ProjectController {
                 .exportToJson(
                     geographyLocked,
                     projectName,
-                    timeline
+                    timeline,
+                    this.referenceMapController.exportProjectState()
                 )
 
         /*

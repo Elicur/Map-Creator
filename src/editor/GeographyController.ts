@@ -79,6 +79,11 @@ export type GeographyEditorBridge = {
         (
             locked: boolean
         ) => void
+
+    setReferenceMapEditingEnabled:
+        (
+            enabled: boolean
+        ) => void
 }
 
 
@@ -189,6 +194,11 @@ export class GeographyController {
         this.editorBridge
             ?.setMapRendererGeographyLocked(
                 locked
+            )
+
+        this.editorBridge
+            ?.setReferenceMapEditingEnabled(
+                !locked
             )
 
         if (

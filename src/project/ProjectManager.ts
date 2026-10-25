@@ -79,8 +79,8 @@ export class ProjectManager {
     public exportToJson(
         geographyLocked: boolean,
         projectName: string,
-        timeline:
-            TimelineProjectState | null
+        timeline: TimelineProjectState | null,
+        referenceImage: string | null
     ): string {
 
         const project: MapProject = {
@@ -104,6 +104,8 @@ export class ProjectManager {
 
             borderImage:
                 this.drawing.exportImage(),
+
+            referenceImage,
 
             territories:
                 this.territoryManager.getAll(),
@@ -150,6 +152,8 @@ export class ProjectManager {
         name: string
         timeline:
             TimelineProjectState | null
+        referenceImage:
+            string | null
     }> {
 
         const project =
@@ -245,7 +249,10 @@ export class ProjectManager {
                 project.name,
 
             timeline:
-                project.timeline
+                project.timeline,
+
+            referenceImage:
+                project.referenceImage
         }
     }
 
@@ -559,6 +566,27 @@ function parseProject(
         throw new Error(
             'El proyecto no contiene información de timeline'
         )
+    }
+
+    if (
+        project.referenceImage !==
+            undefined &&
+        project.referenceImage !==
+            null &&
+        typeof project.referenceImage !==
+            'string'
+    ) {
+        throw new Error(
+            'Imagen de referencia inválida'
+        )
+    }
+
+    if (
+        project.referenceImage ===
+            undefined
+    ) {
+        project.referenceImage =
+            null
     }
 
     return project as MapProject

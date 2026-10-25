@@ -51,6 +51,10 @@ import {
     MapRenderer,
 } from '../rendering/MapRenderer'
 
+import {
+    ReferenceMapController,
+} from '../reference/ReferenceMapController'
+
 const BORDER_STROKE_WIDTH = 3
 
 export class InputController {
@@ -81,6 +85,8 @@ export class InputController {
 
     private mapRenderer: MapRenderer
 
+    private referenceMapController: ReferenceMapController
+
     constructor(
         ui: EditorUI,
         camera: CameraController,
@@ -93,7 +99,8 @@ export class InputController {
         politicsController: PoliticsController,
         geographyController: GeographyController,
         historyController: EditorHistoryController,
-        mapRenderer: MapRenderer
+        mapRenderer: MapRenderer,
+        referenceMapController: ReferenceMapController
     ) {
         this.ui = ui
         this.camera = camera
@@ -107,6 +114,7 @@ export class InputController {
         this.geographyController = geographyController
         this.historyController = historyController
         this.mapRenderer = mapRenderer
+        this.referenceMapController = referenceMapController
 
         this.projectController
             .setEditorBridge({
@@ -256,6 +264,15 @@ export class InputController {
                         this.mapRenderer
                             .setGeographyLocked(
                                 locked
+                            )
+                    },
+
+                setReferenceMapEditingEnabled:
+                    enabled => {
+
+                        this.referenceMapController
+                            .setEditingEnabled(
+                                enabled
                             )
                     },
             })

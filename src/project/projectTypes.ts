@@ -39,6 +39,9 @@ export type MapProject = {
     borderImage:
         string
 
+    referenceImage:
+        string | null
+
     territories:
         Territory[]
 
