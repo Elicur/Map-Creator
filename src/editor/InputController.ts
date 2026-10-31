@@ -285,6 +285,15 @@ export class InputController {
                             borderImage
                         )
             )
+
+        this.referenceMapController
+            .setCreateTerritoriesHandler(
+                seeds =>
+                    this.geographyController
+                        .createTerritoriesFromSeeds(
+                            seeds
+                        )
+            )
     }
 
 

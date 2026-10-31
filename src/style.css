@@ -887,3 +887,17 @@ select {
     display: none;
 }
 
+
+#referenceCanvas.territory-analysis-interactive {
+    z-index: 4;
+
+    pointer-events: auto;
+
+    cursor: pointer;
+}
+
+
+#createDetectedTerritoriesButton.hidden {
+    display: none;
+}
+

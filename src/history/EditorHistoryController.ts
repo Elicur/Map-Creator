@@ -425,6 +425,31 @@ export class EditorHistoryController {
                 }
 
                 // -----------------------------
+                // CREAR TERRITORIOS
+                // -----------------------------
+
+                if (
+                    command.type ===
+                    'create-territories'
+                ) {
+
+                    for (
+                        const territory of
+                        command.territories
+                    ) {
+
+                        this.territoryManager.recreate(
+                            territory.territoryId,
+                            territory.seedX,
+                            territory.seedY,
+                            this.drawing.getPixels()
+                        )
+                    }
+
+                    continue
+                }
+
+                // -----------------------------
                 // ELIMINAR TERRITORIO
                 // -----------------------------
 
@@ -687,6 +712,7 @@ export class EditorHistoryController {
         return (
             command.type === 'stroke' ||
             command.type === 'create-territory' ||
+            command.type === 'create-territories' ||
             command.type === 'delete-territory' ||
             command.type === 'split-territory' ||
             command.type === 'import-borders'

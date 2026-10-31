@@ -36,6 +36,10 @@ import type {
     TerritorySplitEvent,
 } from '../timeline/timelineTypes'
 
+import type {
+    Point,
+} from '../types/editor'
+
 export type GeographyEditorBridge = {
 
     getCurrentTool:
@@ -1698,5 +1702,130 @@ export class GeographyController {
             'Fronteras importadas correctamente'
 
         return true
+    }
+
+
+    public createTerritoriesFromSeeds(
+        seeds: Point[]
+    ): {
+        created: number
+        existing: number
+        failed: number
+    } {
+
+        if (
+            this.geographyLocked
+        ) {
+
+            return {
+                created: 0,
+                existing: 0,
+                failed:
+                    seeds.length,
+            }
+        }
+
+
+        const borderPixels =
+            this.drawing.getPixels()
+
+
+        const createdTerritories: {
+            territoryId: number
+            seedX: number
+            seedY: number
+        }[] = []
+
+
+        let existing =
+            0
+
+        let failed =
+            0
+
+
+        for (
+            const seed of
+            seeds
+        ) {
+
+            const result =
+                this.territoryManager
+                    .createAt(
+                        seed.x,
+                        seed.y,
+                        borderPixels
+                    )
+
+
+            if (
+                result.status ===
+                    'existing'
+            ) {
+
+                existing++
+
+                continue
+            }
+
+
+            if (
+                result.status !==
+                    'created'
+            ) {
+
+                failed++
+
+                continue
+            }
+
+
+            createdTerritories.push({
+                territoryId:
+                    result.territory.id,
+
+                seedX:
+                    result.seedX,
+
+                seedY:
+                    result.seedY,
+            })
+        }
+
+
+        /*
+        * Toda la creación automática entra
+        * al historial como una única operación.
+        */
+        if (
+            createdTerritories.length >
+            0
+        ) {
+
+            this.editorBridge
+                ?.commitHistory({
+                    type:
+                        'create-territories',
+
+                    territories:
+                        createdTerritories,
+                })
+
+            this.editorBridge
+                ?.refreshPoliticsUI()
+
+            this.editorBridge
+                ?.refreshMapRenderer()
+        }
+
+
+        return {
+            created:
+                createdTerritories.length,
+
+            existing,
+
+            failed,
+        }
     }
 }

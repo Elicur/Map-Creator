@@ -143,9 +143,25 @@ export type ImportBordersCommand = {
         string
 }
 
+export type CreatedTerritoryState = {
+    territoryId: number
+    seedX: number
+    seedY: number
+}
+
+
+export type CreateTerritoriesCommand = {
+    type:
+        'create-territories'
+
+    territories:
+        CreatedTerritoryState[]
+}
+
 export type HistoryCommand =
   | StrokeCommand
   | CreateTerritoryCommand
+  | CreateTerritoriesCommand
   | SplitTerritoryCommand
   | RenameTerritoryCommand
   | CreateCountryCommand

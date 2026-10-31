@@ -92,6 +92,9 @@ export type EditorUI = {
     timelineBar: HTMLDivElement
 
     applyReferenceBordersButton: HTMLButtonElement
+    analyzeReferenceTerritoriesButton: HTMLButtonElement
+
+    createDetectedTerritoriesButton: HTMLButtonElement
 }
 
 
@@ -133,6 +136,21 @@ export function createUI(): EditorUI {
 
                         <button id="territoryButton">
                             🗺️ Territorio
+                        </button>
+
+                        <button
+                            id="analyzeReferenceTerritoriesButton"
+                            type="button"
+                        >
+                            Analizar territorios
+                        </button>
+
+                        <button
+                            id="createDetectedTerritoriesButton"
+                            type="button"
+                            class="hidden"
+                        >
+                            Crear territorios
                         </button>
 
                         <button id="selectButton">
@@ -1036,6 +1054,16 @@ export function createUI(): EditorUI {
         applyReferenceBordersButton:
             getElement<HTMLButtonElement>(
                 '#applyReferenceBordersButton'
+            ),
+
+        analyzeReferenceTerritoriesButton:
+            getElement<HTMLButtonElement>(
+                '#analyzeReferenceTerritoriesButton'
+            ),
+
+        createDetectedTerritoriesButton:
+            getElement<HTMLButtonElement>(
+                '#createDetectedTerritoriesButton'
             ),
     }
 }
